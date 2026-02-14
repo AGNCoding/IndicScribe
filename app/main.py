@@ -4,6 +4,7 @@ FastAPI server for optical character recognition and speech-to-text
 """
 import os
 import logging
+import time
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
@@ -78,7 +79,11 @@ async def root():
 
 
 @app.post("/api/ocr")
-async def ocr(file: UploadFile = File(...)):
+async def ocr(
+    file: UploadFile = File(...),
+    page_start: int = Form(default=None),
+    page_end: int = Form(default=None)
+):
     """
     Extract text from images and PDFs using advanced hybrid OCR.
     
@@ -89,6 +94,8 @@ async def ocr(file: UploadFile = File(...)):
     
     Args:
         file: Image (jpg, png, webp, gif) or PDF file
+        page_start: Optional start page (1-indexed, for PDFs only)
+        page_end: Optional end page (1-indexed inclusive, for PDFs only)
         
     Returns:
         dict: Extracted text from the document
@@ -100,6 +107,9 @@ async def ocr(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="No file provided")
         
         logger.info(f"OCR request for file: {file.filename}, content_type: {file.content_type}")
+        if page_start or page_end:
+            logger.info(f"Page range: {page_start}-{page_end}")
+        overall_start = time.time()
         
         # Read file bytes
         file_bytes = await file.read()
@@ -115,10 +125,16 @@ async def ocr(file: UploadFile = File(...)):
         
         # Detect text from the image
         logger.info("Starting text detection...")
-        extracted_text = vision_service.detect_text(file_bytes)
+        extract_start = time.time()
+        extracted_text = vision_service.detect_text(file_bytes, page_start=page_start, page_end=page_end)
+        extract_time = time.time() - extract_start
         logger.info(f"Text extraction complete. Result length: {len(extracted_text) if extracted_text else 0}")
+        logger.info(f"TIMING: Text detection took {extract_time:.2f} seconds")
         
-        return {"text": extracted_text}
+        overall_time = time.time() - overall_start
+        logger.info(f"TIMING: Total OCR request time {overall_time:.2f} seconds")
+        
+        return {"text": extracted_text, "processing_time_seconds": extract_time}
         
     except HTTPException:
         raise

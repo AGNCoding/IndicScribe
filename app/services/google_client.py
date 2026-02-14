@@ -6,6 +6,7 @@ from google.cloud import vision, speech
 import os
 import io
 import logging
+import time
 import pdfplumber
 from pdf2image import convert_from_bytes
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -29,13 +30,15 @@ class VisionService:
         """Check if file is PDF by magic bytes"""
         return file_bytes[:4] == b'%PDF'
 
-    def detect_text(self, file_bytes):
+    def detect_text(self, file_bytes, page_start=None, page_end=None):
         """
         Main entry point: Detect and extract text from image or PDF.
         Intelligent routing based on file type and content.
         
         Args:
             file_bytes: Raw bytes from image or PDF
+            page_start: Optional start page (1-indexed, for PDFs only)
+            page_end: Optional end page (1-indexed inclusive, for PDFs only)
             
         Returns:
             str: Extracted text
@@ -47,9 +50,10 @@ class VisionService:
             
             if self._is_pdf(file_bytes):
                 logger.info("PDF detected - Starting hybrid OCR pipeline")
-                return self._extract_text_from_pdf_hybrid(file_bytes)
+                return self._extract_text_from_pdf_hybrid(file_bytes, page_start=page_start, page_end=page_end)
             else:
                 logger.info("Image detected - Starting Vision API OCR")
+                # Page parameters are ignored for images
                 return self._extract_text_from_image(file_bytes)
             
         except Exception as e:
@@ -106,36 +110,60 @@ class VisionService:
         logger.info(f"✓ Text quality acceptable: {cid_percentage:.1f}% CID, {control_percentage:.1f}% control chars")
         return True
 
-    def _extract_text_from_pdf_hybrid(self, pdf_bytes):
+    def _extract_text_from_pdf_hybrid(self, pdf_bytes, page_start=None, page_end=None):
         """
         Hybrid PDF OCR Strategy:
         1. Try direct text extraction (searchable PDFs) - INSTANT, NO API CALLS
         2. If poor quality detected, convert to images and use Vision API (scanned PDFs)
+        
+        Args:
+            pdf_bytes: Raw PDF bytes
+            page_start: Optional start page (1-indexed)
+            page_end: Optional end page (1-indexed inclusive)
         """
         try:
+            start_time = time.time()
             # Phase 1: Direct text extraction from PDF
             logger.info("Phase 1: Attempting direct text extraction...")
-            extracted_text = self._extract_text_directly_from_pdf(pdf_bytes)
+            extracted_text = self._extract_text_directly_from_pdf(pdf_bytes, page_start=page_start, page_end=page_end)
             
             # Evaluate extraction quality with intelligent detection
             if extracted_text and self._is_text_quality_good(extracted_text):
-                logger.info(f"✓ Direct extraction successful: {len(extracted_text)} chars")
+                phase1_time = time.time() - start_time
+                logger.info(f"✓ Direct extraction successful: {len(extracted_text)} chars in {phase1_time:.2f}s")
+                logger.info(f"TIMING: Phase 1 (Direct text extraction) completed in {phase1_time:.2f} seconds")
                 return extracted_text
             
             # Phase 2: If direct extraction failed or quality poor, use image-based OCR
             logger.warning("Phase 1 failed quality check. Phase 2: Converting PDF to images for Vision API...")
-            return self._extract_text_via_images(pdf_bytes)
+            phase1_time = time.time() - start_time
+            logger.info(f"TIMING: Phase 1 took {phase1_time:.2f} seconds, starting Phase 2...")
+            
+            phase2_start = time.time()
+            result = self._extract_text_via_images(pdf_bytes, page_start=page_start, page_end=page_end)
+            phase2_time = time.time() - phase2_start
+            total_time = time.time() - start_time
+            
+            logger.info(f"TIMING: Phase 2 (Vision API OCR) completed in {phase2_time:.2f} seconds")
+            logger.info(f"TIMING: Total hybrid OCR time: {total_time:.2f} seconds")
+            return result
             
         except Exception as e:
             logger.error(f"Error in hybrid PDF OCR: {str(e)}")
             return ""
 
-    def _extract_text_directly_from_pdf(self, pdf_bytes):
+    def _extract_text_directly_from_pdf(self, pdf_bytes, page_start=None, page_end=None):
         """
         Fast direct text extraction from searchable PDFs.
         Zero API calls, instant results.
+        
+        Args:
+            pdf_bytes: Raw PDF bytes
+            page_start: Optional start page (1-indexed)
+            page_end: Optional end page (1-indexed inclusive)
         """
         try:
+            start_time = time.time()
             logger.info("Extracting text directly from PDF...")
             pdf_file = io.BytesIO(pdf_bytes)
             text_parts = []
@@ -144,44 +172,82 @@ class VisionService:
                 total_pages = len(pdf.pages)
                 logger.info(f"PDF has {total_pages} pages")
                 
-                for page_num, page in enumerate(pdf.pages, 1):
+                # Determine page range
+                start = max(1, page_start) if page_start else 1
+                end = min(total_pages, page_end) if page_end else total_pages
+                
+                if page_start or page_end:
+                    logger.info(f"Processing pages {start} to {end}")
+                
+                for page_num in range(start, end + 1):
                     try:
+                        page_start_time = time.time()
+                        page = pdf.pages[page_num - 1]  # Convert 1-indexed to 0-indexed
                         page_text = page.extract_text()
+                        page_time = time.time() - page_start_time
                         if page_text:
                             text_parts.append(f"--- Page {page_num} ---\n{page_text}\n")
-                            logger.debug(f"Page {page_num}: {len(page_text)} chars extracted")
+                            logger.debug(f"Page {page_num}: {len(page_text)} chars extracted in {page_time:.3f}s")
+                        else:
+                            logger.debug(f"Page {page_num}: No text extracted in {page_time:.3f}s")
                     except Exception as e:
                         logger.warning(f"Error extracting page {page_num}: {str(e)}")
                         continue
             
             full_text = "\n".join(text_parts)
-            logger.info(f"Direct extraction complete: {len(full_text)} total chars from {total_pages} pages")
+            elapsed_time = time.time() - start_time
+            pages_processed = (end - start + 1) if page_start or page_end else total_pages
+            logger.info(f"Direct extraction complete: {len(full_text)} total chars from {pages_processed} pages in {elapsed_time:.2f}s")
             return full_text
             
         except Exception as e:
             logger.error(f"Error in direct extraction: {str(e)}")
             return ""
 
-    def _extract_text_via_images(self, pdf_bytes):
+    def _extract_text_via_images(self, pdf_bytes, page_start=None, page_end=None):
         """
         Convert PDF pages to images and use Vision API for OCR.
         Uses parallel processing for speed.
+        
+        Args:
+            pdf_bytes: Raw PDF bytes
+            page_start: Optional start page (1-indexed)
+            page_end: Optional end page (1-indexed inclusive)
         """
         try:
+            start_time = time.time()
             logger.info("Converting PDF to images...")
-            images = convert_from_bytes(pdf_bytes, dpi=300)  # High DPI for quality
-            logger.info(f"Converted {len(images)} pages to images at 300 DPI")
             
-            if not images:
-                logger.warning("No images generated from PDF")
+            conversion_start = time.time()
+            # Convert all pages first, then slice if needed
+            all_images = convert_from_bytes(pdf_bytes, dpi=300)  # High DPI for quality
+            conversion_time = time.time() - conversion_start
+            logger.info(f"Converted {len(all_images)} pages to images at 300 DPI in {conversion_time:.2f}s")
+            
+            # Determine page range
+            total_pages = len(all_images)
+            start = max(1, page_start) if page_start else 1
+            end = min(total_pages, page_end) if page_end else total_pages
+            
+            if page_start or page_end:
+                logger.info(f"Processing pages {start} to {end}")
+            
+            # Slice images if page range specified
+            images_to_process = all_images[start-1:end]  # Convert 1-indexed to 0-indexed slice
+            
+            logger.info(f"TIMING: PDF to image conversion took {conversion_time:.2f} seconds")
+            
+            if not images_to_process:
+                logger.warning("No images to process")
                 return ""
             
             # Process images in parallel
             text_parts = []
+            ocr_start = time.time()
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 futures = {
-                    executor.submit(self._extract_text_from_pil_image, img, page_num): page_num
-                    for page_num, img in enumerate(images, 1)
+                    executor.submit(self._extract_text_from_pil_image, img, start + idx): (start + idx)
+                    for idx, img in enumerate(images_to_process)
                 }
                 
                 for future in as_completed(futures):
@@ -194,10 +260,16 @@ class VisionService:
                     except Exception as e:
                         logger.error(f"Error processing page {page_num}: {str(e)}")
             
+            ocr_time = time.time() - ocr_start
+            logger.info(f"TIMING: Vision API OCR on {len(images_to_process)} pages took {ocr_time:.2f} seconds")
+            
             # Sort by page number and join
             text_parts.sort(key=lambda x: x[0])
             full_text = "\n".join([f"--- Page {num} ---\n{text}\n" for num, text in text_parts])
-            logger.info(f"Image-based OCR complete: {len(full_text)} total chars")
+            
+            elapsed_time = time.time() - start_time
+            logger.info(f"Image-based OCR complete: {len(full_text)} total chars in {elapsed_time:.2f}s")
+            logger.info(f"TIMING: Image extraction total time {elapsed_time:.2f}s (conversion: {conversion_time:.2f}s, OCR: {ocr_time:.2f}s)")
             return full_text
             
         except Exception as e:
