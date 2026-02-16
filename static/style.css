@@ -1,0 +1,292 @@
+* {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Typography for Indian scripts */
+.hindi-font {
+    font-family: 'Noto Sans Devanagari', sans-serif;
+}
+
+.kannada-font {
+    font-family: 'Noto Sans Kannada', sans-serif;
+}
+
+.telugu-font {
+    font-family: 'Noto Sans Telugu', sans-serif;
+}
+
+.sanskrit-font {
+    font-family: 'Noto Sans Devanagari', sans-serif;
+}
+
+/* Quill Editor Styling - Modern, Deduplicated */
+#editor {
+    background: white;
+    font-size: 16px;
+    line-height: 1.7;
+    min-height: 400px;
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ql-toolbar {
+    border: 1px solid #cbd5e1;
+    border-radius: 0.75rem 0.75rem 0 0;
+    background: #f8fafc;
+    padding: 0.5rem 1rem;
+}
+
+.ql-container {
+    border: 1px solid #cbd5e1;
+    border-top: none;
+    border-radius: 0 0 0.75rem 0.75rem;
+    font-size: 16px;
+    background: #fff;
+    min-height: 350px;
+}
+
+.ql-editor {
+    min-height: 350px;
+    padding: 1.25rem 1.5rem;
+    font-size: 1rem;
+    line-height: 1.7;
+    border-radius: 0 0 0.75rem 0.75rem;
+    background: transparent;
+}
+
+/* A4 Paper Styling */
+.a4-container {
+    width: 210mm;
+    height: auto;
+    max-width: 100%;
+    box-shadow: none;
+}
+
+/* Source Viewer Styles */
+#sourceViewer {
+    max-height: 800px;
+    background-color: #f9fafb;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#sourceViewer::-webkit-scrollbar {
+    width: 8px;
+}
+
+#sourceViewer::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 10px;
+}
+
+#sourceViewer::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+#sourceViewer::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+#sourceViewer canvas,
+#sourceViewer img {
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+    margin: auto;
+}
+
+#tabsContainer {
+    min-height: 40px;
+}
+
+#pdfCanvas {
+    display: block;
+    margin: auto;
+}
+
+/* Tab Styles */
+.doc-tab {
+    padding: 0.5rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-bottom: none;
+    border-radius: 0.5rem 0.5rem 0 0;
+    background-color: #f1f5f9;
+    color: #64748b;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 200px;
+}
+
+.doc-tab:hover {
+    background-color: #e2e8f0;
+    color: #475569;
+}
+
+.doc-tab.active {
+    background-color: #fff;
+    color: #2563eb;
+    border-color: #2563eb;
+    border-bottom: 2px solid white;
+    margin-bottom: -1px;
+    z-index: 10;
+}
+
+.doc-tab .close-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.doc-tab .close-tab:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.doc-tab .tab-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Loading Spinner */
+.spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Recording indicator */
+.recording-pulse {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Print Styles */
+@media print {
+    body {
+        background: white;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    /* Hide left pane when printing */
+    main>div>div:first-child {
+        display: none !important;
+    }
+
+    /* Make right pane full width */
+    main>div {
+        grid-template-columns: 1fr !important;
+    }
+
+    .a4-container {
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        box-shadow: none;
+        page-break-after: auto;
+        padding: 0;
+        margin: 0;
+    }
+
+    .ql-toolbar,
+    .ql-container {
+        border: none !important;
+        box-shadow: none !important;
+        background: none !important;
+    }
+
+    .ql-editor {
+        padding: 0.5rem 0.75rem !important;
+        border-radius: 0.5rem !important;
+        background: none !important;
+    }
+
+    main {
+        padding: 0;
+        margin: 0;
+        max-width: 100%;
+    }
+
+    main>div {
+        margin: 0;
+        gap: 0;
+    }
+
+    main>div>div>h2 {
+        display: none;
+    }
+}
+
+/* Floating PDF Button */
+.floating-btn {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    z-index: 40;
+    transition: all 0.3s ease;
+}
+
+.floating-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.floating-btn:active {
+    transform: scale(0.95);
+}
+
+/* Mic Button Toggle States */
+.mic-btn {
+    transition: all 0.3s ease;
+}
+
+.mic-btn.recording {
+    background-color: #ef4444;
+    color: white;
+}
+
+.mic-btn.recording:hover {
+    background-color: #dc2626;
+}

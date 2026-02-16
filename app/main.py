@@ -6,15 +6,31 @@ import os
 import logging
 import time
 from pathlib import Path
+from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure logging with a more structured format
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("indic-scribe")
+
+# --- Models ---
+
+class OCRResponse(BaseModel):
+    text: str = Field(..., description="The extracted text from the document")
+    processing_time_seconds: float = Field(..., description="Time taken to process the document")
+
+class VoiceResponse(BaseModel):
+    text: str = Field(..., description="The transcribed text from the audio")
+
+# --- App Settings & Middleware ---
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,40 +46,63 @@ from app.services.google_client import get_google_client
 # Initialize FastAPI application
 app = FastAPI(
     title="Indic Scribe",
-    description="OCR and Speech-to-Text Application",
-    version="1.0.0",
+    description="Advanced OCR and Speech-to-Text Application for Indic Languages",
+    version="1.2.0",
 )
 
-# Add CORS middleware
+# Add CORS middleware - Restrict in production
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self' https://cdn.tailwindcss.com https://cdn.quilljs.com https://cdnjs.cloudflare.com https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.quilljs.com https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.quilljs.com https://cdnjs.cloudflare.com; img-src 'self' data: blob:;"
+    return response
+
+# Global Exception Handler
+from fastapi.responses import JSONResponse
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal server error occurred. Please try again later."}
+    )
 
 # Mount static files
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+# --- Lifecycle ---
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize Google Cloud client on startup"""
     try:
-        google_client = get_google_client()
-        print("✓ Google Cloud Stack initialized successfully")
+        get_google_client()
+        logger.info("✓ Google Cloud Stack initialized successfully")
     except Exception as e:
-        print(f"⚠ Warning: Failed to initialize Google Cloud client: {e}")
+        logger.error(f"⚠ Critical Error: Failed to initialize Google Cloud client: {e}")
 
+# --- Endpoints ---
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> Dict[str, str]:
     """Health check endpoint"""
     return {"status": "Google Stack Active"}
-
 
 @app.get("/")
 async def root():
@@ -73,134 +112,79 @@ async def root():
         return FileResponse(index_path, media_type="text/html")
     return {
         "message": "Welcome to Indic Scribe",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "documentation": "/docs",
     }
 
-
-@app.post("/api/ocr")
+@app.post("/api/ocr", response_model=OCRResponse)
 async def ocr(
     file: UploadFile = File(...),
-    page_start: int = Form(default=None),
-    page_end: int = Form(default=None)
-):
+    page_start: Optional[int] = Form(None),
+    page_end: Optional[int] = Form(None)
+) -> Any:
     """
     Extract text from images and PDFs using advanced hybrid OCR.
-    
-    Strategy:
-    - Searchable PDFs: Direct text extraction (instant, 0 API calls)
-    - Scanned PDFs: Image-based OCR with parallel processing  
-    - Images: Direct Vision API processing
-    
-    Args:
-        file: Image (jpg, png, webp, gif) or PDF file
-        page_start: Optional start page (1-indexed, for PDFs only)
-        page_end: Optional end page (1-indexed inclusive, for PDFs only)
-        
-    Returns:
-        dict: Extracted text from the document
     """
     try:
         # Validate file
         if not file.filename:
-            logger.error("No filename provided")
             raise HTTPException(status_code=400, detail="No file provided")
         
-        logger.info(f"OCR request for file: {file.filename}, content_type: {file.content_type}")
-        if page_start or page_end:
-            logger.info(f"Page range: {page_start}-{page_end}")
-        overall_start = time.time()
+        logger.info(f"OCR request: {file.filename} ({file.content_type})")
+        start_time = time.time()
         
         # Read file bytes
         file_bytes = await file.read()
-        logger.info(f"File size: {len(file_bytes)} bytes")
-        
         if not file_bytes:
-            logger.error("File is empty")
             raise HTTPException(status_code=400, detail="File is empty")
         
-        # Get the Vision Service from Google Cloud client
+        # Process OCR
         google_client = get_google_client()
         vision_service = google_client.get_vision_service()
         
-        # Detect text from the image
-        logger.info("Starting text detection...")
-        extract_start = time.time()
+        logger.info("Running text detection...")
         extracted_text = vision_service.detect_text(file_bytes, page_start=page_start, page_end=page_end)
-        extract_time = time.time() - extract_start
-        logger.info(f"Text extraction complete. Result length: {len(extracted_text) if extracted_text else 0}")
-        logger.info(f"TIMING: Text detection took {extract_time:.2f} seconds")
         
-        overall_time = time.time() - overall_start
-        logger.info(f"TIMING: Total OCR request time {overall_time:.2f} seconds")
+        processing_time = time.time() - start_time
+        logger.info(f"OCR complete in {processing_time:.2f}s")
         
-        return {"text": extracted_text, "processing_time_seconds": extract_time}
+        return OCRResponse(text=extracted_text or "", processing_time_seconds=processing_time)
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in OCR route: {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing image: {str(e)}"
-        )
+        logger.error(f"Error in OCR: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/api/voice")
+@app.post("/api/voice", response_model=VoiceResponse)
 async def voice(
     file: UploadFile = File(...),
-    language: str = Form(default="hi-IN")
-):
+    language: str = Form("hi-IN")
+) -> Any:
     """
     Transcribe speech to text using Google Cloud Speech-to-Text API.
-    Automatically converts audio to optimal format (Mono, 16000Hz WAV).
-    
-    Args:
-        file: Audio file to transcribe (WebM, MP3, OGG, WAV, etc.)
-        language: Language code (default: hi-IN for Hindi)
-        
-    Returns:
-        dict: Transcribed text from the audio
     """
     try:
-        # Validate file
         if not file.filename:
             raise HTTPException(status_code=400, detail="No file provided")
         
-        # Read file bytes
         audio_bytes = await file.read()
-        
         if not audio_bytes:
             raise HTTPException(status_code=400, detail="File is empty")
         
-        # Validate language code format
-        if not language:
-            language = "hi-IN"
-        
-        # Get the Speech Service from Google Cloud client
         google_client = get_google_client()
         speech_service = google_client.get_speech_service()
         
-        # Transcribe audio
-        transcript = speech_service.transcribe(audio_bytes, language_code=language)
+        transcript = speech_service.transcribe(audio_bytes, language_code=language or "hi-IN")
         
-        return {"text": transcript}
+        return VoiceResponse(text=transcript or "")
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing audio: {str(e)}"
-        )
-
+        logger.error(f"Error in Voice: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-    )
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

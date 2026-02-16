@@ -1,0 +1,15 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.env
+credentials/
+google_credentials.json
+.vscode/
+.idea/
+.DS_Store
+*.png
+*.pdf
+*.webp
+*.log

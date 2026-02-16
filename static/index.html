@@ -1,247 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Indic Scribe - OCR & Speech to Text</title>
-    
+
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Google Fonts: Noto Sans fonts for Indian scripts -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Kannada:wght@400;500;700&family=Noto+Sans+Telugu:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Kannada:wght@400;500;700&family=Noto+Sans+Telugu:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
     <!-- Quill.js Rich Text Editor -->
     <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-    
-    <style>
-        * {
-            font-family: 'Inter', sans-serif;
-        }
 
-        /* Typography for Indian scripts */
-        .hindi-font {
-            font-family: 'Noto Sans Devanagari', sans-serif;
-        }
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="/static/style.css">
 
-        .kannada-font {
-            font-family: 'Noto Sans Kannada', sans-serif;
-        }
-
-        .telugu-font {
-            font-family: 'Noto Sans Telugu', sans-serif;
-        }
-
-        .sanskrit-font {
-            font-family: 'Noto Sans Devanagari', sans-serif;
-        }
-
-        /* Quill Editor Styling - Modern, Deduplicated */
-        #editor {
-            background: white;
-            font-size: 16px;
-            line-height: 1.7;
-            min-height: 400px;
-            border-radius: 0.75rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        }
-
-        .ql-toolbar {
-            border: 1px solid #cbd5e1;
-            border-radius: 0.75rem 0.75rem 0 0;
-            background: #f8fafc;
-            padding: 0.5rem 1rem;
-        }
-
-        .ql-container {
-            border: 1px solid #cbd5e1;
-            border-top: none;
-            border-radius: 0 0 0.75rem 0.75rem;
-            font-size: 16px;
-            background: #fff;
-            min-height: 350px;
-        }
-
-        .ql-editor {
-            min-height: 350px;
-            padding: 1.25rem 1.5rem;
-            font-size: 1rem;
-            line-height: 1.7;
-            border-radius: 0 0 0.75rem 0.75rem;
-            background: transparent;
-        }
-
-        /* A4 Paper Styling */
-        .a4-container {
-            width: 210mm;
-            height: auto;
-            max-width: 100%;
-            box-shadow: none;
-        }
-
-        /* Source Viewer Styles */
-        #sourceViewer {
-            max-height: 800px;
-            background-color: #f9fafb;
-            overflow-y: auto;
-            overflow-x: hidden;
-        }
-
-        #sourceViewer::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        #sourceViewer::-webkit-scrollbar-track {
-            background: #f1f5f9;
-            border-radius: 10px;
-        }
-
-        #sourceViewer::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
-        }
-
-        #sourceViewer::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-
-        #sourceViewer canvas,
-        #sourceViewer img {
-            max-width: 100%;
-            height: auto;
-            object-fit: contain;
-            margin: auto;
-        }
-
-        #pdfCanvas {
-            display: block;
-            margin: auto;
-        }
-
-        /* Loading Spinner */
-        .spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 1s ease-in-out infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Recording indicator */
-        .recording-pulse {
-            animation: pulse 1.5s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        /* Print Styles */
-        @media print {
-            body {
-                background: white;
-            }
-            
-            .no-print {
-                display: none !important;
-            }
-
-            /* Hide left pane when printing */
-            main > div > div:first-child {
-                display: none !important;
-            }
-
-            /* Make right pane full width */
-            main > div {
-                grid-template-columns: 1fr !important;
-            }
-
-            .a4-container {
-                width: 100%;
-                max-width: 100%;
-                height: auto;
-                box-shadow: none;
-                page-break-after: auto;
-                padding: 0;
-                margin: 0;
-            }
-
-            .ql-toolbar,
-            .ql-container {
-                border: none !important;
-                box-shadow: none !important;
-                background: none !important;
-            }
-            .ql-editor {
-                padding: 0.5rem 0.75rem !important;
-                border-radius: 0.5rem !important;
-                background: none !important;
-            }
-
-            main {
-                padding: 0;
-                margin: 0;
-                max-width: 100%;
-            }
-
-            main > div {
-                margin: 0;
-                gap: 0;
-            }
-
-            main > div > div > h2 {
-                display: none;
-            }
-        }
-
-        /* Floating PDF Button */
-        .floating-btn {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            cursor: pointer;
-            z-index: 40;
-            transition: all 0.3s ease;
-        }
-
-        .floating-btn:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-        }
-
-        .floating-btn:active {
-            transform: scale(0.95);
-        }
-
-        /* Mic Button Toggle States */
-        .mic-btn {
-            transition: all 0.3s ease;
-        }
-
-        .mic-btn.recording {
-            background-color: #ef4444;
-            color: white;
-        }
-
-        .mic-btn.recording:hover {
-            background-color: #dc2626;
-        }
-    </style>
 </head>
+
 <body class="bg-gray-50">
     <!-- Header -->
     <header class="bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-lg no-print">
@@ -258,7 +38,8 @@
                 <!-- Language Dropdown -->
                 <div class="flex items-center gap-2">
                     <label for="language" class="text-sm font-medium text-gray-700">Language:</label>
-                    <select id="language" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                    <select id="language"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
                         <option value="en-US">English</option>
                         <option value="hi-IN" selected>Hindi</option>
                         <option value="sa-IN">Sanskrit</option>
@@ -268,32 +49,39 @@
                 </div>
 
                 <!-- Upload File Button -->
-                <button id="uploadBtn" class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+                <button id="uploadBtn"
+                    class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                     </svg>
                     Upload
                 </button>
 
                 <!-- Run OCR Button -->
-                <button id="runOcrBtn" class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                <button id="runOcrBtn"
+                    class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     Run OCR
                 </button>
 
                 <!-- Mic Record Button -->
-                <button id="micBtn" class="mic-btn flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium">
+                <button id="micBtn"
+                    class="mic-btn flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm font-medium">
                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
-                        <path d="M17 16.91c-1.48 1.46-3.51 2.36-5.76 2.36s-4.29-.9-5.77-2.36l-1.04 1.05c1.84 1.89 4.35 3.05 7.05 3.05s5.21-1.16 7.05-3.05l-1.035-1.04z" />
+                        <path
+                            d="M17 16.91c-1.48 1.46-3.51 2.36-5.76 2.36s-4.29-.9-5.77-2.36l-1.04 1.05c1.84 1.89 4.35 3.05 7.05 3.05s5.21-1.16 7.05-3.05l-1.035-1.04z" />
                     </svg>
                     <span id="micText">Record</span>
                 </button>
 
                 <!-- Hidden File Input -->
-                <input type="file" id="fileInput" accept="image/*,.pdf" class="hidden">
+                <input type="file" id="fileInput" accept="image/*,.pdf" class="hidden" multiple>
             </div>
         </div>
     </nav>
@@ -301,17 +89,22 @@
     <!-- Main Content -->
     <main class="max-w-8xl mx-auto px-4 py-8">
         <!-- Spinner (Hidden by default) -->
-                <!-- Snip OCR Modal -->
-                <div id="snipOcrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
-                    <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
-                        <h2 class="text-xl font-bold text-gray-800 mb-4">Run OCR on selected area?</h2>
-                        <div class="flex gap-3 pt-4 border-t border-gray-200">
-                            <button id="cancelSnipOcrBtn" class="flex-1 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">Cancel</button>
-                            <button id="confirmSnipOcrBtn" class="flex-1 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors text-sm">Yes, Run OCR</button>
-                        </div>
-                    </div>
+        <!-- Snip OCR Modal -->
+        <div id="snipOcrModal"
+            class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
+            <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Run OCR on selected area?</h2>
+                <div class="flex gap-3 pt-4 border-t border-gray-200">
+                    <button id="cancelSnipOcrBtn"
+                        class="close-modal flex-1 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">Cancel</button>
+                    <button id="confirmSnipOcrBtn"
+                        class="flex-1 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors text-sm">Yes,
+                        Run OCR</button>
                 </div>
-        <div id="spinner" class="hidden flex items-center justify-center gap-3 mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            </div>
+        </div>
+        <div id="spinner"
+            class="hidden flex items-center justify-center gap-3 mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div class="spinner"></div>
             <span id="spinnerText" class="text-blue-700 text-sm font-medium">Processing...</span>
         </div>
@@ -321,6 +114,16 @@
             <!-- Left Pane: Uploaded Document Viewer -->
             <div class="flex flex-col">
                 <h2 class="text-lg font-bold text-gray-800 mb-3">Source Document</h2>
+                <!-- Tab Container -->
+                <div class="flex items-center justify-between mb-2 no-print">
+                    <div id="tabsContainer" class="flex flex-wrap gap-2 overflow-x-auto pb-1">
+                        <!-- Tabs will be generated here -->
+                    </div>
+                    <button id="clearAllBtn"
+                        class="text-xs text-red-600 hover:text-white hover:bg-red-600 px-2 py-1 rounded border border-red-200 transition-colors ml-2 hidden">
+                        Clear All
+                    </button>
+                </div>
                 <div class="flex-1 border border-gray-300 rounded-lg bg-gray-50">
                     <div id="sourceViewer" class="h-full max-h-[800px] overflow-y-auto overflow-x-hidden">
                         <div class="text-center text-gray-500 p-4">
@@ -334,7 +137,8 @@
             <div class="flex flex-col">
                 <h2 class="text-lg font-bold text-gray-800 mb-3">OCR Editor</h2>
                 <div class="flex-1 overflow-auto border border-gray-300 rounded-lg">
-                    <div class="a4-container bg-gradient-to-br from-white via-blue-50 to-blue-100 p-6 md:p-10 m-auto rounded-2xl shadow-xl border border-blue-100">
+                    <div
+                        class="a4-container bg-gradient-to-br from-white via-blue-50 to-blue-100 p-6 md:p-10 m-auto rounded-2xl shadow-xl border border-blue-100">
                         <!-- Quill Editor -->
                         <div class="rounded-xl bg-white/80 shadow border border-gray-200 p-4 md:p-6">
                             <div id="editor"></div>
@@ -348,62 +152,72 @@
     <!-- Floating Export Button -->
     <button id="exportBtn" class="floating-btn bg-red-600 text-white hover:bg-red-700 no-print" title="Export document">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
     </button>
 
     <!-- Export Menu Modal -->
-    <div id="exportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
+    <div id="exportModal"
+        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
         <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Export Document</h2>
-            
+
             <div class="space-y-2">
                 <!-- PDF Option -->
-                <button id="exportPdf" class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
+                <button id="exportPdf"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
                     <div class="font-medium text-gray-800">PDF</div>
                     <div class="text-sm text-gray-600">Formatted document with styles</div>
                 </button>
 
                 <!-- TXT Option -->
-                <button id="exportTxt" class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
+                <button id="exportTxt"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
                     <div class="font-medium text-gray-800">TXT</div>
                     <div class="text-sm text-gray-600">Plain text format</div>
                 </button>
 
                 <!-- ODT Option -->
-                <button id="exportOdt" class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
+                <button id="exportOdt"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
                     <div class="font-medium text-gray-800">ODT</div>
                     <div class="text-sm text-gray-600">OpenDocument Text format</div>
                 </button>
 
                 <!-- HTML Option -->
-                <button id="exportHtml" class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
+                <button id="exportHtml"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
                     <div class="font-medium text-gray-800">HTML</div>
                     <div class="text-sm text-gray-600">Web format with formatting</div>
                 </button>
 
                 <!-- Custom Option -->
-                <button id="exportCustom" class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
+                <button id="exportCustom"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 border border-gray-200 hover:border-blue-300 transition-colors">
                     <div class="font-medium text-gray-800">Custom</div>
                     <div class="text-sm text-gray-600">Choose format and options</div>
                 </button>
             </div>
 
             <!-- Close Button -->
-            <button id="closeExportModal" class="w-full mt-4 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">
+            <button id="closeExportModal"
+                class="close-modal w-full mt-4 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">
                 Close
             </button>
         </div>
     </div>
 
     <!-- Custom Export Modal -->
-    <div id="customExportModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
+    <div id="customExportModal"
+        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
         <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Custom Export</h2>
-            
+
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Select Format:</label>
-                <select id="customFormat" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
+                <select id="customFormat"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm">
                     <option value="pdf">PDF</option>
                     <option value="txt">TXT (Plain Text)</option>
                     <option value="odt">ODT (OpenDocument)</option>
@@ -430,10 +244,12 @@
 
             <!-- Action Buttons -->
             <div class="flex gap-3">
-                <button id="cancelCustomExport" class="flex-1 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">
+                <button id="cancelCustomExport"
+                    class="close-modal flex-1 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">
                     Cancel
                 </button>
-                <button id="confirmCustomExport" class="flex-1 px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors text-sm">
+                <button id="confirmCustomExport"
+                    class="flex-1 px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors text-sm">
                     Export
                 </button>
             </div>
@@ -441,14 +257,16 @@
     </div>
 
     <!-- OCR Page Selection Modal -->
-    <div id="ocrModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
+    <div id="ocrModal"
+        class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 no-print">
         <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Select Pages for OCR</h2>
-            
+
             <!-- File info -->
             <div class="mb-4 p-3 bg-gray-50 rounded-lg">
                 <p class="text-sm text-gray-600">
-                    <span class="font-medium">File:</span> <span id="modalFileName" class="break-words">document.pdf</span>
+                    <span class="font-medium">File:</span> <span id="modalFileName"
+                        class="break-words">document.pdf</span>
                 </p>
                 <p id="pageLimitText" class="text-sm text-gray-600 mt-1"></p>
             </div>
@@ -468,18 +286,22 @@
             <!-- Page range inputs -->
             <div id="pageRangeInputs" class="ml-7 mb-4 hidden">
                 <div class="flex gap-2 items-center">
-                    <input type="number" id="startPage" min="1" value="1" class="w-16 px-2 py-1 border border-gray-300 rounded text-sm">
+                    <input type="tel" id="startPage" value="1"
+                        class="w-16 px-2 py-1 border border-gray-300 rounded text-sm">
                     <span class="text-gray-600">to</span>
-                    <input type="number" id="endPage" min="1" value="1" class="w-16 px-2 py-1 border border-gray-300 rounded text-sm">
+                    <input type="tel" id="endPage" value="1"
+                        class="w-16 px-2 py-1 border border-gray-300 rounded text-sm">
                 </div>
             </div>
 
             <!-- Action Buttons -->
             <div class="flex gap-3 pt-4 border-t border-gray-200">
-                <button id="cancelOcrBtn" class="flex-1 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">
+                <button id="cancelOcrBtn"
+                    class="close-modal flex-1 px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors text-sm">
                     Cancel
                 </button>
-                <button id="confirmOcrBtn" class="flex-1 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors text-sm">
+                <button id="confirmOcrBtn"
+                    class="flex-1 px-4 py-2 text-white bg-green-600 hover:bg-green-700 rounded-lg font-medium transition-colors text-sm">
                     Run OCR
                 </button>
             </div>
@@ -489,779 +311,8 @@
     <!-- Quill.js Library -->
     <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
 
-    <script>
-                // ==================== Snip/Drag Selection for OCR ====================
-                const sourceViewer = document.getElementById('sourceViewer');
-                let isSnipping = false, snipStart = null, snipRect = null, snipCanvas = null;
-                let snipSelection = null;
-
-                // Draw selection rectangle overlay
-                function createSnipRect(x, y) {
-                    const rect = document.createElement('div');
-                    rect.style.position = 'absolute';
-                    rect.style.border = '2px dashed #2563eb';
-                    rect.style.background = 'rgba(59,130,246,0.1)';
-                    rect.style.pointerEvents = 'none';
-                    rect.style.zIndex = 100;
-                    rect.style.left = x + 'px';
-                    rect.style.top = y + 'px';
-                    rect.style.width = '0px';
-                    rect.style.height = '0px';
-                    rect.id = 'snipRect';
-                    return rect;
-                }
-
-                // Mouse events for snipping
-                sourceViewer.addEventListener('mousedown', (e) => {
-                    if (e.button !== 0) return;
-                    // Only allow snipping on canvas or img
-                    if (!(e.target.tagName === 'CANVAS' || e.target.tagName === 'IMG')) return;
-                    // Remove any existing snipRect
-                    if (snipRect) { snipRect.remove(); snipRect = null; }
-                    isSnipping = true;
-                    snipStart = { x: e.offsetX, y: e.offsetY, target: e.target };
-                    snipRect = createSnipRect(e.offsetX, e.offsetY);
-                    sourceViewer.style.position = 'relative';
-                    sourceViewer.appendChild(snipRect);
-                });
-
-                sourceViewer.addEventListener('mousemove', (e) => {
-                    if (!isSnipping || !snipRect) return;
-                    const x = Math.min(e.offsetX, snipStart.x);
-                    const y = Math.min(e.offsetY, snipStart.y);
-                    const w = Math.abs(e.offsetX - snipStart.x);
-                    const h = Math.abs(e.offsetY - snipStart.y);
-                    snipRect.style.left = x + 'px';
-                    snipRect.style.top = y + 'px';
-                    snipRect.style.width = w + 'px';
-                    snipRect.style.height = h + 'px';
-                });
-
-                sourceViewer.addEventListener('mouseup', (e) => {
-                    if (!isSnipping || !snipRect) return;
-                    isSnipping = false;
-                    const x = Math.min(e.offsetX, snipStart.x);
-                    const y = Math.min(e.offsetY, snipStart.y);
-                    const w = Math.abs(e.offsetX - snipStart.x);
-                    const h = Math.abs(e.offsetY - snipStart.y);
-                    if (w < 10 || h < 10) {
-                        snipRect.remove();
-                        snipRect = null;
-                        return;
-                    }
-                    snipSelection = { x, y, w, h, target: snipStart.target };
-                    document.getElementById('snipOcrModal').classList.remove('hidden');
-                });
-
-                // Cancel/confirm snip OCR
-                document.getElementById('cancelSnipOcrBtn').onclick = () => {
-                    document.getElementById('snipOcrModal').classList.add('hidden');
-                    if (snipRect) { snipRect.remove(); snipRect = null; }
-                    snipSelection = null;
-                    isSnipping = false;
-                    snipStart = null;
-                };
-                document.getElementById('snipOcrModal').addEventListener('click', (e) => {
-                    if (e.target === document.getElementById('snipOcrModal')) {
-                        document.getElementById('snipOcrModal').classList.add('hidden');
-                        if (snipRect) { snipRect.remove(); snipRect = null; }
-                        snipSelection = null;
-                        isSnipping = false;
-                        snipStart = null;
-                    }
-                });
-                document.getElementById('confirmSnipOcrBtn').onclick = async () => {
-                    document.getElementById('snipOcrModal').classList.add('hidden');
-                    if (snipRect) { snipRect.remove(); snipRect = null; }
-                    if (!snipSelection) { isSnipping = false; snipStart = null; return; }
-                    // Calculate scaling ratio between displayed and natural size
-                    let cropBlob = null;
-                    if (snipSelection.target.tagName === 'CANVAS') {
-                        const srcCanvas = snipSelection.target;
-                        const displayRect = srcCanvas.getBoundingClientRect();
-                        const scaleX = srcCanvas.width / displayRect.width;
-                        const scaleY = srcCanvas.height / displayRect.height;
-                        const sx = Math.round(snipSelection.x * scaleX);
-                        const sy = Math.round(snipSelection.y * scaleY);
-                        const sw = Math.round(snipSelection.w * scaleX);
-                        const sh = Math.round(snipSelection.h * scaleY);
-                        const cropCanvas = document.createElement('canvas');
-                        cropCanvas.width = sw;
-                        cropCanvas.height = sh;
-                        const ctx = cropCanvas.getContext('2d');
-                        ctx.drawImage(srcCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
-                        cropBlob = await new Promise(res => cropCanvas.toBlob(res, 'image/png'));
-                    } else if (snipSelection.target.tagName === 'IMG') {
-                        const img = snipSelection.target;
-                        const displayRect = img.getBoundingClientRect();
-                        const scaleX = img.naturalWidth / displayRect.width;
-                        const scaleY = img.naturalHeight / displayRect.height;
-                        const sx = Math.round(snipSelection.x * scaleX);
-                        const sy = Math.round(snipSelection.y * scaleY);
-                        const sw = Math.round(snipSelection.w * scaleX);
-                        const sh = Math.round(snipSelection.h * scaleY);
-                        const cropCanvas = document.createElement('canvas');
-                        cropCanvas.width = sw;
-                        cropCanvas.height = sh;
-                        const ctx = cropCanvas.getContext('2d');
-                        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
-                        cropBlob = await new Promise(res => cropCanvas.toBlob(res, 'image/png'));
-                    }
-                    snipSelection = null;
-                    isSnipping = false;
-                    snipStart = null;
-                    if (!cropBlob) return;
-                    // Show spinner
-                    spinner.classList.remove('hidden');
-                    spinnerText.textContent = 'Performing OCR on selection...';
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', cropBlob, 'snip.png');
-                        const response = await fetch('/api/ocr', { method: 'POST', body: formData });
-                        if (!response.ok) throw new Error('OCR failed');
-                        const result = await response.json();
-                        if (result.text && result.text.trim().length > 0) {
-                            quill.insertText(quill.getLength(), '\n' + result.text + '\n');
-                            quill.setSelection(quill.getLength());
-                        } else {
-                            quill.insertText(quill.getLength(), '\n[No text detected in selection]\n');
-                        }
-                    } catch (err) {
-                        quill.insertText(quill.getLength(), '\n[Error: ' + err.message + ']\n');
-                    } finally {
-                        spinner.classList.add('hidden');
-                    }
-                };
-        // ==================== Quill Editor Initialization ====================
-        const quill = new Quill('#editor', {
-            theme: 'snow',
-            placeholder: 'Start typing... or upload an image/PDF for OCR, or record audio for transcription',
-            modules: {
-                toolbar: [
-                    [{ 'header': [1, 2, 3, false] }],
-                    ['bold', 'italic', 'underline', 'strike'],
-                    ['blockquote', 'code-block'],
-                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                    [{ 'font': [] }],
-                    [{ 'align': [] }],
-                    ['clean']
-                ]
-            }
-        });
-
-        // ==================== Language & Font Management ====================
-        const languageSelect = document.getElementById('language');
-        const fontMap = {
-            'en-US': 'Inter',
-            'hi-IN': 'Noto Sans Devanagari',
-            'sa-IN': 'Noto Sans Devanagari',
-            'kn-IN': 'Noto Sans Kannada',
-            'te-IN': 'Noto Sans Telugu'
-        };
-
-        languageSelect.addEventListener('change', (e) => {
-            const font = fontMap[e.target.value];
-            quill.format('font', font);
-        });
-
-        // ==================== OCR: Upload & Process Image/PDF ====================
-        const uploadBtn = document.getElementById('uploadBtn');
-        const runOcrBtn = document.getElementById('runOcrBtn');
-        const fileInput = document.getElementById('fileInput');
-        const spinner = document.getElementById('spinner');
-        const spinnerText = document.getElementById('spinnerText');
-        const ocrModal = document.getElementById('ocrModal');
-        const allPagesRadio = document.getElementById('allPages');
-        const pageRangeRadio = document.getElementById('pageRange');
-        const pageRangeInputs = document.getElementById('pageRangeInputs');
-        const cancelOcrBtn = document.getElementById('cancelOcrBtn');
-        const confirmOcrBtn = document.getElementById('confirmOcrBtn');
-        const modalFileName = document.getElementById('modalFileName');
-        const pageLimitText = document.getElementById('pageLimitText');
-        const startPageInput = document.getElementById('startPage');
-        const endPageInput = document.getElementById('endPage');
-
-        let currentFile = null;
-        let currentFilePages = 1;
-
-        uploadBtn.addEventListener('click', () => {
-            console.log('Upload button clicked');
-            fileInput.click();
-        });
-
-        fileInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            console.log('File selected:', file?.name);
-            
-            if (!file) {
-                console.warn('No file selected');
-                return;
-            }
-
-            currentFile = file;
-            runOcrBtn.disabled = false;
-
-            // Display file in source viewer
-            const sourceViewer = document.getElementById('sourceViewer');
-            sourceViewer.innerHTML = ''; // Clear previous content
-
-            // For PDFs, ensure PDF.js is loaded before getting page count
-            if (file.type === 'application/pdf') {
-                const loadAndProcessPDF = async () => {
-                    try {
-                        const fileBytes = await file.arrayBuffer();
-                        const pdf = await pdfjsLib.getDocument(fileBytes).promise;
-                        currentFilePages = pdf.numPages;
-                        // Display PDF using PDF.js
-                        displayPDF(file, sourceViewer);
-                    } catch (err) {
-                        console.warn('Could not determine page count:', err);
-                        currentFilePages = 1;
-                        sourceViewer.innerHTML = '<p class="text-red-500">Error loading PDF preview</p>';
-                    }
-                };
-                if (typeof pdfjsLib === 'undefined') {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                    script.onload = () => {
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                        loadAndProcessPDF();
-                    };
-                    document.head.appendChild(script);
-                } else {
-                    loadAndProcessPDF();
-                }
-            } else if (file.type.startsWith('image/')) {
-                // Display image
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const img = document.createElement('img');
-                    img.src = event.target.result;
-                    sourceViewer.innerHTML = '';
-                    sourceViewer.appendChild(img);
-                };
-                reader.readAsDataURL(file);
-                currentFilePages = 1;
-            } else {
-                sourceViewer.innerHTML = '<p class="text-gray-500">Unsupported file type. Please upload a PDF or image.</p>';
-                currentFilePages = 1;
-            }
-
-            // Update modal with file info (after PDF.js loads, for PDF)
-            modalFileName.textContent = file.name;
-            if (file.type === 'application/pdf') {
-                // Wait for PDF.js to finish (may be async)
-                setTimeout(() => {
-                    pageLimitText.textContent = `Total pages: ${currentFilePages}`;
-                    endPageInput.max = currentFilePages;
-                    endPageInput.value = currentFilePages;
-                }, 300);
-            } else {
-                pageLimitText.textContent = 'Single image file';
-                endPageInput.max = 1;
-                endPageInput.value = 1;
-            }
-
-            console.log('File ready for OCR. Pages:', currentFilePages);
-        });
-
-        // Helper function to display PDF using PDF.js
-        async function displayPDF(file, container) {
-            // Load PDF.js library dynamically
-            if (typeof pdfjsLib === 'undefined') {
-                const script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-                script.onload = () => {
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                    renderPDFPreview(file, container);
-                };
-                document.head.appendChild(script);
-            } else {
-                renderPDFPreview(file, container);
-            }
-        }
-
-        // Helper function to render PDF preview
-        async function renderPDFPreview(file, container) {
-            try {
-                const fileBytes = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument(fileBytes).promise;
-                
-                container.innerHTML = '';
-                
-                // Create a wrapper for all pages
-                const pagesWrapper = document.createElement('div');
-                pagesWrapper.className = 'flex flex-col gap-4 p-4';
-                
-                const scale = 1.2;
-                
-                // Render all pages
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    try {
-                        const page = await pdf.getPage(pageNum);
-                        const viewport = page.getViewport({ scale });
-                        
-                        // Create page container
-                        const pageDiv = document.createElement('div');
-                        pageDiv.className = 'border border-gray-300 rounded-lg overflow-hidden bg-white shadow-sm';
-                        
-                        // Create canvas for page
-                        const canvas = document.createElement('canvas');
-                        canvas.width = viewport.width;
-                        canvas.height = viewport.height;
-                        canvas.className = 'w-full block';
-                        
-                        const context = canvas.getContext('2d');
-                        const renderTask = page.render({
-                            canvasContext: context,
-                            viewport: viewport
-                        });
-                        
-                        await renderTask.promise;
-                        
-                        // Add page number label
-                        const pageLabel = document.createElement('div');
-                        pageLabel.className = 'text-center text-xs text-gray-500 bg-gray-50 py-1 border-t border-gray-300';
-                        pageLabel.textContent = `Page ${pageNum} of ${pdf.numPages}`;
-                        
-                        pageDiv.appendChild(canvas);
-                        pageDiv.appendChild(pageLabel);
-                        pagesWrapper.appendChild(pageDiv);
-                        
-                    } catch (err) {
-                        console.error(`Error rendering page ${pageNum}:`, err);
-                        const errorDiv = document.createElement('div');
-                        errorDiv.className = 'border border-red-300 rounded-lg p-4 bg-red-50 text-red-600 text-sm';
-                        errorDiv.textContent = `Error loading page ${pageNum}`;
-                        pagesWrapper.appendChild(errorDiv);
-                    }
-                }
-                
-                container.appendChild(pagesWrapper);
-                
-            } catch (err) {
-                console.error('Error rendering PDF:', err);
-                container.innerHTML = '<p class="text-red-500 p-4">Error displaying PDF preview</p>';
-            }
-        }
-
-        // Modal page option changes
-        allPagesRadio.addEventListener('change', () => {
-            pageRangeInputs.classList.add('hidden');
-        });
-
-        pageRangeRadio.addEventListener('change', () => {
-            pageRangeInputs.classList.remove('hidden');
-        });
-
-        // Update end page when start page changes
-        startPageInput.addEventListener('change', () => {
-            const startVal = parseInt(startPageInput.value) || 1;
-            if (parseInt(endPageInput.value) < startVal) {
-                endPageInput.value = startVal;
-            }
-        });
-
-        // Run OCR button - show modal
-        runOcrBtn.addEventListener('click', () => {
-            if (!currentFile) {
-                alert('Please upload a file first');
-                return;
-            }
-            
-            // Reset modal state
-            allPagesRadio.checked = true;
-            pageRangeRadio.checked = false;
-            pageRangeInputs.classList.add('hidden');
-            startPageInput.value = 1;
-            endPageInput.value = currentFilePages;
-            
-            ocrModal.classList.remove('hidden');
-        });
-
-        // Cancel OCR
-        cancelOcrBtn.addEventListener('click', () => {
-            ocrModal.classList.add('hidden');
-        });
-
-        // Close modal when clicking outside
-        ocrModal.addEventListener('click', (e) => {
-            if (e.target === ocrModal) {
-                ocrModal.classList.add('hidden');
-            }
-        });
-
-        // Confirm OCR - process file
-        confirmOcrBtn.addEventListener('click', async () => {
-            // Validate page range before closing modal
-            if (pageRangeRadio.checked) {
-                const pageStart = parseInt(startPageInput.value) || 1;
-                const pageEnd = parseInt(endPageInput.value) || currentFilePages;
-                if (pageStart < 1 || pageEnd < pageStart) {
-                    alert('Please enter a valid page range: "to" must be greater than or equal to "from".');
-                    return;
-                }
-            }
-
-            ocrModal.classList.add('hidden');
-
-            if (!currentFile) {
-                alert('No file selected');
-                return;
-            }
-
-            // Show spinner
-            spinner.classList.remove('hidden');
-            spinnerText.textContent = 'Performing OCR...';
-
-            try {
-                let pageStart = null;
-                let pageEnd = null;
-
-                if (pageRangeRadio.checked) {
-                    pageStart = parseInt(startPageInput.value) || 1;
-                    pageEnd = parseInt(endPageInput.value) || currentFilePages;
-                }
-
-                const formData = new FormData();
-                formData.append('file', currentFile);
-                
-                if (pageStart !== null) {
-                    formData.append('page_start', pageStart);
-                    formData.append('page_end', pageEnd);
-                    console.log(`Running OCR on pages ${pageStart}-${pageEnd}`);
-                } else {
-                    console.log('Running OCR on all pages');
-                }
-
-                console.log('Sending POST request to /api/ocr');
-                const response = await fetch('/api/ocr', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                console.log('Response status:', response.status);
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('Response error:', errorText);
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const result = await response.json();
-                console.log('OCR result received');
-                
-                // Append extracted text to editor
-                if (result.text && result.text.trim().length > 0) {
-                    console.log('Inserting text into editor...');
-                    quill.insertText(quill.getLength(), '\n' + result.text + '\n');
-                    quill.setSelection(quill.getLength());
-                } else {
-                    quill.insertText(quill.getLength(), '\n[No text detected in document]\n');
-                }
-            } catch (error) {
-                console.error('OCR Error:', error);
-                quill.insertText(quill.getLength(), '\n[Error: ' + error.message + ']\n');
-            } finally {
-                spinner.classList.add('hidden');
-                fileInput.value = '';
-            }
-        });
-
-        // ==================== Voice: MediaRecorder & Transcription ====================
-        const micBtn = document.getElementById('micBtn');
-        let mediaRecorder;
-        let audioChunks = [];
-        let isRecording = false;
-
-        micBtn.addEventListener('click', async () => {
-            if (!isRecording) {
-                // Start recording
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-
-                    mediaRecorder.ondataavailable = (event) => {
-                        audioChunks.push(event.data);
-                    };
-
-                    mediaRecorder.onstop = async () => {
-                        // Show spinner
-                        spinner.classList.remove('hidden');
-                        spinnerText.textContent = 'Transcribing...';
-
-                        try {
-                            // Create blob from audio chunks
-                            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-
-                            // Create FormData
-                            const formData = new FormData();
-                            formData.append('file', audioBlob, 'recording.webm');
-                            formData.append('language', languageSelect.value);
-
-                            // Send to transcription API
-                            const response = await fetch('/api/voice', {
-                                method: 'POST',
-                                body: formData
-                            });
-
-                            if (!response.ok) {
-                                throw new Error(`HTTP error! status: ${response.status}`);
-                            }
-
-                            const result = await response.json();
-
-                            // Append transcribed text to editor
-                            if (result.text) {
-                                quill.insertText(quill.getLength(), '\n' + result.text + '\n');
-                                quill.setSelection(quill.getLength());
-                            }
-                        } catch (error) {
-                            console.error('Transcription Error:', error);
-                            quill.insertText(quill.getLength(), '\n[Error: Failed to transcribe - ' + error.message + ']\n');
-                        } finally {
-                            // Hide spinner
-                            spinner.classList.add('hidden');
-
-                            // Stop all audio tracks
-                            stream.getTracks().forEach(track => track.stop());
-                        }
-                    };
-
-                    mediaRecorder.start();
-                    isRecording = true;
-                    micBtn.classList.add('recording', 'recording-pulse');
-                    document.getElementById('micText').textContent = 'Stop';
-                } catch (error) {
-                    console.error('Microphone Error:', error);
-                    alert('Unable to access microphone. Please check permissions.');
-                }
-            } else {
-                // Stop recording
-                mediaRecorder.stop();
-                isRecording = false;
-                micBtn.classList.remove('recording', 'recording-pulse');
-                document.getElementById('micText').textContent = 'Record';
-            }
-        });
-
-        // ==================== Export: Multiple Formats ====================
-        const exportBtn = document.getElementById('exportBtn');
-        const exportModal = document.getElementById('exportModal');
-        const customExportModal = document.getElementById('customExportModal');
-        const closeExportModal = document.getElementById('closeExportModal');
-        const cancelCustomExport = document.getElementById('cancelCustomExport');
-        const confirmCustomExport = document.getElementById('confirmCustomExport');
-
-        // Export format buttons
-        const exportPdf = document.getElementById('exportPdf');
-        const exportTxt = document.getElementById('exportTxt');
-        const exportOdt = document.getElementById('exportOdt');
-        const exportHtml = document.getElementById('exportHtml');
-        const exportCustom = document.getElementById('exportCustom');
-
-        // Open export modal
-        exportBtn.addEventListener('click', () => {
-            exportModal.classList.remove('hidden');
-        });
-
-        // Close export modal
-        closeExportModal.addEventListener('click', () => {
-            exportModal.classList.add('hidden');
-        });
-
-        // Close modal when clicking outside
-        exportModal.addEventListener('click', (e) => {
-            if (e.target === exportModal) {
-                exportModal.classList.add('hidden');
-            }
-        });
-
-        // Helper: Get document content and clean it
-        function getDocumentContent() {
-            const delta = quill.getContents();
-            const text = quill.getText();
-            return { delta, text };
-        }
-
-        // Helper: Generate filename with timestamp
-        function generateFilename(extension) {
-            const now = new Date();
-            const timestamp = now.toISOString().slice(0, 10);
-            return `document_${timestamp}.${extension}`;
-        }
-
-        // Helper: Download file
-        function downloadFile(content, filename, mimeType) {
-            const blob = new Blob([content], { type: mimeType });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
-        }
-
-        // Export to PDF
-        exportPdf.addEventListener('click', () => {
-            exportModal.classList.add('hidden');
-            window.print();
-        });
-
-        // Export to TXT
-        exportTxt.addEventListener('click', () => {
-            exportModal.classList.add('hidden');
-            const { text } = getDocumentContent();
-            downloadFile(text, generateFilename('txt'), 'text/plain');
-        });
-
-        // Export to HTML
-        exportHtml.addEventListener('click', () => {
-            exportModal.classList.add('hidden');
-            const delta = quill.getContents();
-            const html = quill.root.innerHTML;
-            
-            const fullHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Export</title>
-    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; }
-        .ql-container { border: none !important; font-size: 16px !important; background: none !important; }
-        .ql-editor { padding: 0 !important; background: none !important; }
-    </style>
-</head>
-<body>
-    <div class="ql-container ql-snow">
-        <div class="ql-editor">${html}</div>
-    </div>
+    <!-- Custom Logic -->
+    <script type="module" src="/static/app.js"></script>
 </body>
-</html>`;
-            
-            downloadFile(fullHtml, generateFilename('html'), 'text/html');
-        });
 
-        // Export to ODT (using simple approach)
-        exportOdt.addEventListener('click', () => {
-            exportModal.classList.add('hidden');
-            const { text } = getDocumentContent();
-            const html = quill.root.innerHTML;
-            
-            // Simple ODT structure (basic ODF container)
-            const odtContent = `<?xml version="1.0" encoding="UTF-8"?>
-<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
-    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
-    xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
-    office:version="1.2">
-    <office:body>
-        <office:text>
-            <text:p>${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text:p>
-        </office:text>
-    </office:body>
-</office:document>`;
-            
-            downloadFile(odtContent, generateFilename('odt'), 'application/vnd.oasis.opendocument.text');
-        });
-
-        // Open custom export modal
-        exportCustom.addEventListener('click', () => {
-            exportModal.classList.add('hidden');
-            customExportModal.classList.remove('hidden');
-        });
-
-        // Close custom export modal
-        cancelCustomExport.addEventListener('click', () => {
-            customExportModal.classList.add('hidden');
-        });
-
-        // Close modal when clicking outside
-        customExportModal.addEventListener('click', (e) => {
-            if (e.target === customExportModal) {
-                customExportModal.classList.add('hidden');
-            }
-        });
-
-        // Custom export confirm
-        confirmCustomExport.addEventListener('click', () => {
-            const format = document.getElementById('customFormat').value;
-            const includeFormatting = document.getElementById('includeFormatting').checked;
-            const includeMetadata = document.getElementById('includeMetadata').checked;
-            const pageNumbers = document.getElementById('pageNumbers').checked;
-            
-            customExportModal.classList.add('hidden');
-
-            const { text, delta } = getDocumentContent();
-            let content = '';
-            let extension = format;
-            let mimeType = 'text/plain';
-
-            // Generate metadata
-            const now = new Date();
-            const metadata = `Exported: ${now.toLocaleString()}\n\n`;
-
-            switch (format) {
-                case 'pdf':
-                    window.print();
-                    return;
-
-                case 'txt':
-                    content = (includeMetadata ? metadata : '') + text;
-                    mimeType = 'text/plain';
-                    break;
-
-                case 'markdown':
-                    content = (includeMetadata ? `# Document\n\n${metadata}\n` : '') + text;
-                    mimeType = 'text/markdown';
-                    break;
-
-                case 'json':
-                    const jsonData = {
-                        metadata: includeMetadata ? { exported: now.toISOString() } : undefined,
-                        content: text,
-                        delta: includeFormatting ? delta : undefined
-                    };
-                    content = JSON.stringify(jsonData, null, 2);
-                    mimeType = 'application/json';
-                    break;
-
-                case 'html':
-                    const html = quill.root.innerHTML;
-                    content = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Document</title>
-    ${includeMetadata ? `<meta name="created" content="${now.toISOString()}">` : ''}
-</head>
-<body>${includeFormatting ? html : `<pre>${text}</pre>`}</body>
-</html>`;
-                    mimeType = 'text/html';
-                    break;
-
-                case 'odt':
-                    content = `<?xml version="1.0" encoding="UTF-8"?>
-<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
-    xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
-    <office:body>
-        <office:text>
-            <text:p>${text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</text:p>
-        </office:text>
-    </office:body>
-</office:document>`;
-                    mimeType = 'application/vnd.oasis.opendocument.text';
-                    break;
-            }
-
-            downloadFile(content, generateFilename(extension), mimeType);
-        });
-
-        // ==================== Initialize Font ====================
-        quill.format('font', fontMap[languageSelect.value]);
-    </script>
-</body>
 </html>
