@@ -76,7 +76,11 @@ export class Dictation {
             this.recognition.stop();
         } else {
             const langSelect = document.getElementById('dictateLang');
-            this.recognition.lang = langSelect ? langSelect.value : lang;
+            // Only allow the six specified languages
+            const allowedLangs = ['sa-IN', 'kn-IN', 'hi-IN', 'te-IN', 'ta-IN', 'en-IN'];
+            let selectedLang = langSelect ? langSelect.value : lang;
+            if (!allowedLangs.includes(selectedLang)) selectedLang = 'sa-IN';
+            this.recognition.lang = selectedLang;
             try {
                 this.recognition.start();
             } catch (err) {

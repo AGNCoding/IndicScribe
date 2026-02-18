@@ -82,6 +82,39 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    // File Upload event listeners (moved inside DOMContentLoaded)
+    const fileInput = document.getElementById('fileInput');
+    document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        ui.showSpinner('Preparing files...');
+        const startTime = performance.now();
+        try {
+            for (const fileObj of files) {
+                let pages = 1;
+                if (fileObj.type === 'application/pdf') {
+                    pages = await pdf.getPageCount(fileObj);
+                }
+                tabs.addFile(fileObj, pages);
+            }
+
+            const firstNewIndex = tabs.allFiles.length - files.length;
+            switchTab(firstNewIndex);
+
+            const duration = (performance.now() - startTime) / 1000;
+            console.info(`Preparation for ${files.length} file(s) complete in ${duration.toFixed(2)}s`);
+            ui.notify(`${files.length} file(s) added (${duration.toFixed(2)}s)`, 'success');
+        } catch (err) {
+            ui.notify(err.message, 'error');
+        } finally {
+            fileInput.value = '';
+            ui.hideSpinner();
+        }
+    });
 });
 
 // ==================== Switch/Remove Files ====================
@@ -141,38 +174,6 @@ function updateClearAllVisibility() {
 
 // ==================== Event Listeners ====================
 
-// File Upload
-const fileInput = document.getElementById('fileInput');
-document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
-
-fileInput.addEventListener('change', async (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-
-    ui.showSpinner('Preparing files...');
-    const startTime = performance.now();
-    try {
-        for (const fileObj of files) {
-            let pages = 1;
-            if (fileObj.type === 'application/pdf') {
-                pages = await pdf.getPageCount(fileObj);
-            }
-            tabs.addFile(fileObj, pages);
-        }
-
-        const firstNewIndex = tabs.allFiles.length - files.length;
-        switchTab(firstNewIndex);
-
-        const duration = (performance.now() - startTime) / 1000;
-        console.info(`Preparation for ${files.length} file(s) complete in ${duration.toFixed(2)}s`);
-        ui.notify(`${files.length} file(s) added (${duration.toFixed(2)}s)`, 'success');
-    } catch (err) {
-        ui.notify(err.message, 'error');
-    } finally {
-        fileInput.value = '';
-        ui.hideSpinner();
-    }
-});
 
 // "Clear All" documents
 document.getElementById('clearAllBtn').addEventListener('click', () => {
@@ -248,6 +249,7 @@ document.getElementById('confirmOcrBtn').addEventListener('click', async () => {
         const result = await api.runOcr(fileObj.file, startNum, endNum);
         if (result.text) {
             editor.insertText(result.text);
+            transliteration.setOriginalText(result.text);
             transliteration.setCurrentScheme('devanagari');
             const msg = result.processing_time_seconds
                 ? `OCR complete in ${result.processing_time_seconds.toFixed(2)}s`
