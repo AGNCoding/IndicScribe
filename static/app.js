@@ -571,7 +571,7 @@ async function saveProjectToDrive() {
         editor.currentProjectName = name;
     }
 
-    ui.showSpinner('Saving to Drive...');
+    ui.showSpinner('Saving project...');
     
     try {
         const contents = editor.getContents();
@@ -598,12 +598,21 @@ async function saveProjectToDrive() {
         }
 
         const message = response.saved_to_drive === false 
-            ? `✓ Saved locally: ${response.name} (Re-authenticate to sync to Drive)`
-            : `✓ Saved to Drive: ${response.name}`;
+            ? `✓ Project saved locally: ${response.name}\n(Re-authenticate to sync to Google Drive)`
+            : `✓ Project saved to Google Drive: ${response.name}`;
         
         ui.notify(message, 'success');
+        
+        // Brief visual feedback - add a checkmark animation to the save button
+        const saveBtn = document.querySelector('.ql-save-drive');
+        if (saveBtn) {
+            saveBtn.style.opacity = '0.5';
+            setTimeout(() => {
+                saveBtn.style.opacity = '1';
+            }, 300);
+        }
     } catch (err) {
-        ui.notify(`Save failed: ${err.message}`, 'error');
+        ui.notify(`Failed to save project: ${err.message}`, 'error');
         console.error('Error saving project:', err);
     } finally {
         ui.hideSpinner();
