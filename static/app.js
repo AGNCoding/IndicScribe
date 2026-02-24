@@ -36,6 +36,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabs.render(switchTab, removeFile);
     updateClearAllVisibility();
 
+    // Project Management Event Listeners
+    setupProjectManagement();
+
     // Input validation listeners
     ['startPage', 'endPage'].forEach(id => {
         const input = document.getElementById(id);
@@ -135,17 +138,22 @@ async function checkAuthStatus() {
         if (response.status === 401 || response.status === 403) {
             // Not authenticated: hide app, show hero
             document.getElementById('app-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.add('hidden');
             document.getElementById('login-view').classList.remove('hidden');
         } else if (response.ok) {
             const user = await response.json();
-            // Authenticated: show app, hide hero, populate profile
+            // Authenticated: show dashboard, hide hero and app
             document.getElementById('login-view').classList.add('hidden');
-            document.getElementById('app-view').classList.remove('hidden');
+            document.getElementById('app-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.remove('hidden');
 
             document.getElementById('userAvatar').src = user.picture || 'https://via.placeholder.com/150';
             document.getElementById('userName').textContent = user.name || user.email;
 
             updateCreditsUI(user.ocr_credits, user.voice_credits);
+
+            // Load projects on dashboard
+            await loadProjectsList();
         }
     } catch (err) {
         console.error("Auth check failed:", err);
@@ -411,3 +419,162 @@ document.getElementById('confirmCustomExport').addEventListener('click', () => {
 
 window.addEventListener('resize', ui.syncEditorHeight);
 window.addEventListener('load', ui.syncEditorHeight);
+// ==================== Project Management ====================
+
+async function loadProjectsList() {
+    const container = document.getElementById('projectsContainer');
+    const emptyState = document.getElementById('emptyState');
+    const loadingState = document.getElementById('loadingState');
+
+    loadingState.classList.remove('hidden');
+    emptyState.classList.add('hidden');
+    container.innerHTML = '';
+
+    try {
+        const response = await api.fetchProjects();
+        const projects = response.projects || [];
+
+        loadingState.classList.add('hidden');
+
+        if (projects.length === 0) {
+            emptyState.classList.remove('hidden');
+            return;
+        }
+
+        // Create project cards
+        projects.forEach(project => {
+            const card = createProjectCard(project);
+            container.appendChild(card);
+        });
+    } catch (err) {
+        loadingState.classList.add('hidden');
+        ui.notify('Failed to load projects', 'error');
+        console.error('Error loading projects:', err);
+    }
+}
+
+function createProjectCard(project) {
+    const card = document.createElement('div');
+    card.className = 'group relative h-48 bg-white dark:bg-slate-800 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 flex flex-col p-6 cursor-pointer';
+    
+    const createdDate = new Date(project.createdTime).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+    });
+
+    card.innerHTML = `
+        <div class="flex-1">
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white truncate mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                ${escapeHtml(project.name)}
+            </h3>
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+                Modified: ${createdDate}
+            </p>
+        </div>
+        <button class="mt-4 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+            Open Project
+        </button>
+    `;
+
+    card.querySelector('button').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openProject(project);
+    });
+
+    return card;
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function switchToDashboard() {
+    document.getElementById('app-view').classList.add('hidden');
+    document.getElementById('dashboard-view').classList.remove('hidden');
+    loadProjectsList();
+}
+
+function switchToEditor() {
+    document.getElementById('dashboard-view').classList.add('hidden');
+    document.getElementById('app-view').classList.remove('hidden');
+}
+
+async function createNewProject() {
+    const projectName = prompt('Enter project name:', 'Untitled Project');
+    if (!projectName) return;
+
+    editor.clear();
+    editor.currentProjectName = projectName;
+    editor.currentProjectId = null;
+    
+    switchToEditor();
+    ui.notify(`New project: ${projectName}`, 'success');
+}
+
+async function openProject(project) {
+    ui.showSpinner('Opening project...');
+    
+    try {
+        const response = await api.loadProject(project.id);
+        const content = response.content;
+
+        if (content && typeof content === 'object') {
+            editor.setContents(content);
+        } else {
+            editor.setText(JSON.stringify(content, null, 2));
+        }
+
+        editor.currentProjectName = project.name.replace('IndicScribe_', '').replace('.json', '');
+        editor.currentProjectId = project.id;
+
+        switchToEditor();
+        ui.notify(`Opened: ${project.name}`, 'success');
+    } catch (err) {
+        ui.notify(`Failed to open project: ${err.message}`, 'error');
+        console.error('Error opening project:', err);
+    } finally {
+        ui.hideSpinner();
+    }
+}
+
+async function saveProjectToDrive() {
+    if (!editor.currentProjectName) {
+        const name = prompt('Enter project name:', 'My Project');
+        if (!name) return;
+        editor.currentProjectName = name;
+    }
+
+    ui.showSpinner('Saving to Drive...');
+    
+    try {
+        const contents = editor.getContents();
+        const response = await api.saveProject(editor.currentProjectName, contents);
+        
+        editor.currentProjectId = response.file_id;
+        ui.notify(`✓ Saved to Drive: ${response.name}`, 'success');
+    } catch (err) {
+        ui.notify(`Save failed: ${err.message}`, 'error');
+        console.error('Error saving project:', err);
+    } finally {
+        ui.hideSpinner();
+    }
+}
+
+function setupProjectManagement() {
+    // Create New Project button
+    const createBtn = document.getElementById('createNewProjectBtn');
+    if (createBtn) {
+        createBtn.addEventListener('click', createNewProject);
+    }
+
+    // Save to Drive custom event from editor toolbar
+    document.addEventListener('editor:save-to-drive', saveProjectToDrive);
+}

@@ -195,6 +195,54 @@
         </div>
     </div>
 
+    <!-- Dashboard View (Project Management) -->
+    <div id="dashboard-view" class="hidden min-h-[calc(100vh-140px)] bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-800">
+        <main class="max-w-7xl mx-auto px-4 py-8">
+            <!-- Dashboard Header -->
+            <div class="mb-12">
+                <h2 class="text-3xl font-extrabold text-gray-900 dark:text-white mb-2">My Projects</h2>
+                <p class="text-gray-600 dark:text-gray-400">Manage and organize your documents</p>
+            </div>
+
+            <!-- Projects Grid -->
+            <div id="projectsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Create New Project Card -->
+                <button id="createNewProjectBtn"
+                    class="group relative h-48 bg-white dark:bg-slate-800 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border-2 border-dashed border-blue-300 dark:border-blue-700 hover:border-blue-500 flex flex-col items-center justify-center cursor-pointer">
+                    <div class="text-center">
+                        <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
+                            <svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Create New Project</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-400 mt-2">Start a blank document</p>
+                    </div>
+                </button>
+
+                <!-- Projects Container (populated by JS) -->
+                <div id="projectsContainer"></div>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="hidden text-center py-16">
+                <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No projects yet</h3>
+                <p class="text-gray-600 dark:text-gray-400">Create a new project to get started</p>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="hidden text-center py-16">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4">
+                    <div class="spinner"></div>
+                </div>
+                <p class="text-gray-600 dark:text-gray-400 font-medium">Loading your projects...</p>
+            </div>
+        </main>
+    </div>
+
     <!-- App View Wrapper (Shown when logged in) -->
     <div id="app-view" class="hidden">
         <!-- Main Content -->

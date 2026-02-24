@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from app.services.auth import oauth
+from app.services.drive_client import list_projects, save_project, load_project
 from app.database import get_db, get_or_create_user, User
 import tempfile
 import shutil
@@ -32,6 +33,10 @@ logger = logging.getLogger("indic-scribe")
 class OCRResponse(BaseModel):
     text: str = Field(..., description="The extracted text from the document")
     processing_time_seconds: float = Field(..., description="Time taken to process the document")
+
+class SaveProjectRequest(BaseModel):
+    name: str = Field(..., description="Project name (will be prefixed with 'IndicScribe_')")
+    content: dict = Field(..., description="Editor state (Quill Delta/HTML)")
 
 # --- App Settings & Middleware ---
 
@@ -120,8 +125,14 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
     user_info = token.get('userinfo')
     
     if user_info:
-        # Get or create the user in our database
-        user = get_or_create_user(db, user_info)
+        # Extract OAuth tokens for storage
+        tokens = {
+            'access_token': token.get('access_token'),
+            'refresh_token': token.get('refresh_token')
+        }
+        
+        # Get or create the user in our database and store tokens
+        user = get_or_create_user(db, user_info, tokens=tokens)
         
         # Store user details in session cookie
         request.session['user_id'] = user.id
@@ -233,6 +244,68 @@ async def ocr(
     except Exception as e:
         logger.error(f"Error in OCR: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- Project Management Routes ---
+
+@app.get("/api/projects")
+async def get_projects(user: User = Depends(get_current_user)):
+    """
+    List all projects from the user's Google Drive.
+    
+    Returns a list of projects with id, name, and createdTime.
+    """
+    try:
+        projects = list_projects(user)
+        return {"status": "success", "projects": projects}
+    except ValueError as e:
+        logger.warning(f"User {user.email} cannot list projects: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error listing projects for user {user.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve projects")
+
+@app.post("/api/projects")
+async def create_project(request_body: SaveProjectRequest, user: User = Depends(get_current_user)):
+    """
+    Save a new project or update an existing one on Google Drive.
+    
+    Body:
+        - name: Project name (without IndicScribe_ prefix)
+        - content: Editor state as dict
+    
+    Returns the saved file metadata including id, name, and webViewLink.
+    """
+    try:
+        result = save_project(user, request_body.name, request_body.content)
+        return {
+            "status": "saved",
+            "file_id": result['id'],
+            "name": result['name'],
+            "webViewLink": result.get('webViewLink', '')
+        }
+    except ValueError as e:
+        logger.warning(f"User {user.email} cannot save project: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error saving project for user {user.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save project")
+
+@app.get("/api/projects/{file_id}")
+async def get_project(file_id: str, user: User = Depends(get_current_user)):
+    """
+    Load a specific project from Google Drive by file ID.
+    
+    Returns the full project content (Quill Delta/HTML).
+    """
+    try:
+        content = load_project(user, file_id)
+        return {"status": "success", "content": content}
+    except ValueError as e:
+        logger.warning(f"User {user.email} cannot load project {file_id}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error loading project {file_id} for user {user.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load project")
 
 if __name__ == "__main__":
     import uvicorn
