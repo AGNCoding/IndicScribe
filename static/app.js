@@ -585,7 +585,8 @@ async function saveProjectToDrive() {
         }
 
         // Enable auto-save if not already enabled
-        if (!editor.autoSaveInterval) {
+        // Only enable if project was actually saved to Drive
+        if (!editor.autoSaveInterval && response.saved_to_drive !== false) {
             editor.enableAutoSave(async (projectName, contents) => {
                 try {
                     await api.autoSaveProject(projectName, contents);
@@ -596,7 +597,11 @@ async function saveProjectToDrive() {
             }, 30000); // Auto-save every 30 seconds
         }
 
-        ui.notify(`✓ Saved to Drive: ${response.name}`, 'success');
+        const message = response.saved_to_drive === false 
+            ? `✓ Saved locally: ${response.name} (Re-authenticate to sync to Drive)`
+            : `✓ Saved to Drive: ${response.name}`;
+        
+        ui.notify(message, 'success');
     } catch (err) {
         ui.notify(`Save failed: ${err.message}`, 'error');
         console.error('Error saving project:', err);
@@ -634,20 +639,29 @@ async function handleFirstProjectCreation() {
         isFirstProjectCreated = true;
 
         // Enable auto-save for this project
-        editor.enableAutoSave(async (projectName, contents) => {
-            try {
-                await api.autoSaveProject(projectName, contents);
-                console.log('Project auto-saved');
-            } catch (err) {
-                console.error('Auto-save failed:', err);
-            }
-        }, 30000); // Auto-save every 30 seconds
+        // If project is not saved to drive, auto-save won't work, but user can still edit locally
+        if (response.saved_to_drive !== false) {
+            editor.enableAutoSave(async (projectName, contents) => {
+                try {
+                    await api.autoSaveProject(projectName, contents);
+                    console.log('Project auto-saved');
+                } catch (err) {
+                    console.error('Auto-save failed:', err);
+                }
+            }, 30000); // Auto-save every 30 seconds
+        }
 
-        ui.notify(`✓ First project created: ${response.name}`, 'success');
+        const message = response.saved_to_drive === false 
+            ? `✓ First project created: ${response.name} (Local - Re-authenticate to sync to Drive)`
+            : `✓ First project created: ${response.name}`;
+        
+        ui.notify(message, 'success');
         switchToEditor();
     } catch (err) {
         ui.notify(`Failed to create first project: ${err.message}`, 'error');
         console.error('Error creating first project:', err);
+        // Still allow user to work, even if project creation failed
+        switchToEditor();
     } finally {
         ui.hideSpinner();
     }

@@ -131,8 +131,11 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
             'refresh_token': token.get('refresh_token')
         }
         
+        logger.info(f"OAuth tokens received - access_token: {bool(tokens.get('access_token'))}, refresh_token: {bool(tokens.get('refresh_token'))}")
+        
         # Get or create the user in our database and store tokens
         user = get_or_create_user(db, user_info, tokens=tokens)
+        logger.info(f"User {user.email} tokens stored - access: {bool(user.access_token)}, refresh: {bool(user.refresh_token)}")
         
         # Store user details in session cookie
         request.session['user_id'] = user.id
@@ -270,6 +273,8 @@ async def create_project(request_body: SaveProjectRequest, user: User = Depends(
     """
     Save a new project or update an existing one on Google Drive.
     
+    If tokens are not available, returns success but marks saved_to_drive as False.
+    
     Body:
         - name: Project name (without IndicScribe_ prefix)
         - content: Editor state as dict
@@ -277,6 +282,22 @@ async def create_project(request_body: SaveProjectRequest, user: User = Depends(
     Returns the saved file metadata including id, name, and webViewLink.
     """
     try:
+        # Check if user has Drive tokens
+        if not user.access_token or not user.refresh_token:
+            logger.warning(f"User {user.email} has no Drive tokens. Saving locally only.")
+            # Mark first project as created if this is the user's first project
+            if not user.first_project_created:
+                user.first_project_created = 1
+                db.commit()
+            return {
+                "status": "saved_locally",
+                "file_id": None,
+                "name": request_body.name,
+                "webViewLink": "",
+                "saved_to_drive": False,
+                "message": "Project saved locally. Re-authenticate to sync to Google Drive."
+            }
+        
         result = save_project(user, request_body.name, request_body.content)
         
         # Mark first project as created if this is the user's first project
@@ -289,13 +310,22 @@ async def create_project(request_body: SaveProjectRequest, user: User = Depends(
             "status": "saved",
             "file_id": result['id'],
             "name": result['name'],
-            "webViewLink": result.get('webViewLink', '')
+            "webViewLink": result.get('webViewLink', ''),
+            "saved_to_drive": True
         }
     except ValueError as e:
         logger.warning(f"User {user.email} cannot save project: {e}")
+        # Still mark first project as created to not block user
+        if not user.first_project_created:
+            user.first_project_created = 1
+            db.commit()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error saving project for user {user.email}: {e}", exc_info=True)
+        # Still mark first project as created to not block user
+        if not user.first_project_created:
+            user.first_project_created = 1
+            db.commit()
         raise HTTPException(status_code=500, detail="Failed to save project")
 
 @app.get("/api/projects/{file_id}")
@@ -321,6 +351,9 @@ async def create_first_project(request_body: SaveProjectRequest, user: User = De
     Create the first project for a user when they upload a file.
     This endpoint automatically sets the first_project_created flag.
     
+    If Google Drive tokens are not available, it still marks the first project as created
+    and returns a success response so the user can continue working.
+    
     Body:
         - name: Project name (without IndicScribe_ prefix)
         - content: Editor state as dict
@@ -328,6 +361,22 @@ async def create_first_project(request_body: SaveProjectRequest, user: User = De
     Returns the saved file metadata including id, name, and webViewLink.
     """
     try:
+        # Check if user has Drive tokens
+        if not user.access_token or not user.refresh_token:
+            logger.warning(f"User {user.email} has no Drive tokens yet. Marking first project as created without saving to Drive.")
+            # Mark the user's first project as created even without Drive access
+            user.first_project_created = 1
+            db.commit()
+            return {
+                "status": "marked",
+                "file_id": None,
+                "name": request_body.name,
+                "webViewLink": "",
+                "is_first_project": True,
+                "saved_to_drive": False,
+                "message": "First project marked. Re-authenticate to enable Google Drive sync."
+            }
+        
         # Save the project to Drive
         result = save_project(user, request_body.name, request_body.content)
         
@@ -341,13 +390,20 @@ async def create_first_project(request_body: SaveProjectRequest, user: User = De
             "file_id": result['id'],
             "name": result['name'],
             "webViewLink": result.get('webViewLink', ''),
-            "is_first_project": True
+            "is_first_project": True,
+            "saved_to_drive": True
         }
     except ValueError as e:
         logger.warning(f"User {user.email} cannot create first project: {e}")
+        # Even on error, mark first project as created to avoid blocking user
+        user.first_project_created = 1
+        db.commit()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating first project for user {user.email}: {e}", exc_info=True)
+        # Mark first project as created to avoid blocking user
+        user.first_project_created = 1
+        db.commit()
         raise HTTPException(status_code=500, detail="Failed to create first project")
 
 @app.post("/api/projects/auto-save")
@@ -356,6 +412,8 @@ async def auto_save_project(request_body: SaveProjectRequest, user: User = Depen
     Auto-save a project to Google Drive.
     This endpoint is called periodically by the frontend during editing.
     
+    If tokens are not available, silently returns success without actually saving.
+    
     Body:
         - name: Project name (without IndicScribe_ prefix)
         - content: Editor state as dict
@@ -363,6 +421,15 @@ async def auto_save_project(request_body: SaveProjectRequest, user: User = Depen
     Returns minimal save confirmation.
     """
     try:
+        # If user has no tokens, silently skip auto-save
+        if not user.access_token or not user.refresh_token:
+            return {
+                "status": "auto-saved-locally",
+                "file_id": None,
+                "timestamp": time.time(),
+                "note": "No Drive tokens available. Working locally."
+            }
+        
         result = save_project(user, request_body.name, request_body.content)
         return {
             "status": "auto-saved",
@@ -371,10 +438,21 @@ async def auto_save_project(request_body: SaveProjectRequest, user: User = Depen
         }
     except ValueError as e:
         logger.warning(f"User {user.email} cannot auto-save project: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        # Silently fail for auto-save
+        return {
+            "status": "auto-save-failed",
+            "file_id": None,
+            "timestamp": time.time(),
+            "error": str(e)
+        }
     except Exception as e:
         logger.error(f"Error auto-saving project for user {user.email}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to auto-save project")
+        # Silently fail for auto-save
+        return {
+            "status": "auto-save-failed",
+            "file_id": None,
+            "timestamp": time.time()
+        }
 
 if __name__ == "__main__":
     import uvicorn
