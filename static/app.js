@@ -14,6 +14,7 @@ import { collapsible } from './js/collapsible.js';
 
 let dictation;
 let transliteration;
+let isFirstProjectCreated = false;
 
 // ==================== Initialization ====================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -122,6 +123,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const duration = (performance.now() - startTime) / 1000;
             console.info(`Preparation for ${files.length} file(s) complete in ${duration.toFixed(2)}s`);
             ui.notify(`${files.length} file(s) added (${duration.toFixed(2)}s)`, 'success');
+
+            // Handle first project creation
+            if (!isFirstProjectCreated) {
+                await handleFirstProjectCreation();
+            }
         } catch (err) {
             ui.notify(err.message, 'error');
         } finally {
@@ -142,6 +148,9 @@ async function checkAuthStatus() {
             document.getElementById('login-view').classList.remove('hidden');
         } else if (response.ok) {
             const user = await response.json();
+            // Set the first project created flag
+            isFirstProjectCreated = user.first_project_created;
+
             // Authenticated: show dashboard, hide hero and app
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('app-view').classList.add('hidden');
@@ -535,6 +544,16 @@ async function openProject(project) {
         editor.currentProjectName = project.name.replace('IndicScribe_', '').replace('.json', '');
         editor.currentProjectId = project.id;
 
+        // Enable auto-save for this project
+        editor.enableAutoSave(async (projectName, contents) => {
+            try {
+                await api.autoSaveProject(projectName, contents);
+                console.log('Project auto-saved');
+            } catch (err) {
+                console.error('Auto-save failed:', err);
+            }
+        }, 30000); // Auto-save every 30 seconds
+
         switchToEditor();
         ui.notify(`Opened: ${project.name}`, 'success');
     } catch (err) {
@@ -559,6 +578,24 @@ async function saveProjectToDrive() {
         const response = await api.saveProject(editor.currentProjectName, contents);
         
         editor.currentProjectId = response.file_id;
+
+        // Mark first project as created if not already done (for manual saves)
+        if (!isFirstProjectCreated) {
+            isFirstProjectCreated = true;
+        }
+
+        // Enable auto-save if not already enabled
+        if (!editor.autoSaveInterval) {
+            editor.enableAutoSave(async (projectName, contents) => {
+                try {
+                    await api.autoSaveProject(projectName, contents);
+                    console.log('Project auto-saved');
+                } catch (err) {
+                    console.error('Auto-save failed:', err);
+                }
+            }, 30000); // Auto-save every 30 seconds
+        }
+
         ui.notify(`✓ Saved to Drive: ${response.name}`, 'success');
     } catch (err) {
         ui.notify(`Save failed: ${err.message}`, 'error');
@@ -577,4 +614,41 @@ function setupProjectManagement() {
 
     // Save to Drive custom event from editor toolbar
     document.addEventListener('editor:save-to-drive', saveProjectToDrive);
+}
+
+async function handleFirstProjectCreation() {
+    const projectName = prompt('Create your first project! Enter project name:', 'My First Project');
+    if (!projectName) return;
+
+    editor.clear();
+    editor.currentProjectName = projectName;
+    editor.currentProjectId = null;
+    
+    ui.showSpinner('Creating first project...');
+    
+    try {
+        const contents = editor.getContents();
+        const response = await api.createFirstProject(projectName, contents);
+        
+        editor.currentProjectId = response.file_id;
+        isFirstProjectCreated = true;
+
+        // Enable auto-save for this project
+        editor.enableAutoSave(async (projectName, contents) => {
+            try {
+                await api.autoSaveProject(projectName, contents);
+                console.log('Project auto-saved');
+            } catch (err) {
+                console.error('Auto-save failed:', err);
+            }
+        }, 30000); // Auto-save every 30 seconds
+
+        ui.notify(`✓ First project created: ${response.name}`, 'success');
+        switchToEditor();
+    } catch (err) {
+        ui.notify(`Failed to create first project: ${err.message}`, 'error');
+        console.error('Error creating first project:', err);
+    } finally {
+        ui.hideSpinner();
+    }
 }

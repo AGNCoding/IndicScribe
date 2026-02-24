@@ -68,5 +68,41 @@ export const api = {
         }
 
         return await response.json();
+    },
+
+    async createFirstProject(projectName, content) {
+        const response = await fetch('/api/projects/first', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: projectName,
+                content: content
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Failed to create first project' }));
+            throw new Error(error.detail || 'Failed to create first project');
+        }
+
+        return await response.json();
+    },
+
+    async autoSaveProject(projectName, content) {
+        const response = await fetch('/api/projects/auto-save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: projectName,
+                content: content
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Failed to auto-save project' }));
+            throw new Error(error.detail || 'Failed to auto-save project');
+        }
+
+        return await response.json();
     }
 };

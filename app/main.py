@@ -187,6 +187,7 @@ async def get_current_user_profile(user: User = Depends(get_current_user)):
         "picture": user.picture,
         "ocr_credits": user.ocr_credits,
         "voice_credits": user.voice_credits_seconds,
+        "first_project_created": bool(user.first_project_created),
         "is_logged_in": True
     }
 
@@ -265,7 +266,7 @@ async def get_projects(user: User = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail="Failed to retrieve projects")
 
 @app.post("/api/projects")
-async def create_project(request_body: SaveProjectRequest, user: User = Depends(get_current_user)):
+async def create_project(request_body: SaveProjectRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Save a new project or update an existing one on Google Drive.
     
@@ -277,6 +278,13 @@ async def create_project(request_body: SaveProjectRequest, user: User = Depends(
     """
     try:
         result = save_project(user, request_body.name, request_body.content)
+        
+        # Mark first project as created if this is the user's first project
+        if not user.first_project_created:
+            user.first_project_created = 1
+            db.commit()
+            logger.info(f"First project marked as created for user {user.email}")
+        
         return {
             "status": "saved",
             "file_id": result['id'],
@@ -306,6 +314,67 @@ async def get_project(file_id: str, user: User = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Error loading project {file_id} for user {user.email}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load project")
+
+@app.post("/api/projects/first")
+async def create_first_project(request_body: SaveProjectRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Create the first project for a user when they upload a file.
+    This endpoint automatically sets the first_project_created flag.
+    
+    Body:
+        - name: Project name (without IndicScribe_ prefix)
+        - content: Editor state as dict
+    
+    Returns the saved file metadata including id, name, and webViewLink.
+    """
+    try:
+        # Save the project to Drive
+        result = save_project(user, request_body.name, request_body.content)
+        
+        # Mark the user's first project as created
+        user.first_project_created = 1
+        db.commit()
+        logger.info(f"First project created for user {user.email}")
+        
+        return {
+            "status": "saved",
+            "file_id": result['id'],
+            "name": result['name'],
+            "webViewLink": result.get('webViewLink', ''),
+            "is_first_project": True
+        }
+    except ValueError as e:
+        logger.warning(f"User {user.email} cannot create first project: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating first project for user {user.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create first project")
+
+@app.post("/api/projects/auto-save")
+async def auto_save_project(request_body: SaveProjectRequest, user: User = Depends(get_current_user)):
+    """
+    Auto-save a project to Google Drive.
+    This endpoint is called periodically by the frontend during editing.
+    
+    Body:
+        - name: Project name (without IndicScribe_ prefix)
+        - content: Editor state as dict
+    
+    Returns minimal save confirmation.
+    """
+    try:
+        result = save_project(user, request_body.name, request_body.content)
+        return {
+            "status": "auto-saved",
+            "file_id": result['id'],
+            "timestamp": time.time()
+        }
+    except ValueError as e:
+        logger.warning(f"User {user.email} cannot auto-save project: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error auto-saving project for user {user.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to auto-save project")
 
 if __name__ == "__main__":
     import uvicorn

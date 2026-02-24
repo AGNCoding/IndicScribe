@@ -2,6 +2,8 @@ export const editor = {
     quill: null,
     currentProjectName: null,
     currentProjectId: null,
+    autoSaveInterval: null,
+    autoSaveCallback: null,
 
     init(containerId) {
         this.quill = new Quill(containerId, {
@@ -101,11 +103,39 @@ export const editor = {
         return this.quill ? this.quill.getContents() : null;
     },
 
+    enableAutoSave(callback, interval = 30000) {
+        // interval in milliseconds (default 30 seconds)
+        this.autoSaveCallback = callback;
+        
+        if (this.autoSaveInterval) {
+            clearInterval(this.autoSaveInterval);
+        }
+
+        // Trigger auto-save at regular intervals
+        this.autoSaveInterval = setInterval(() => {
+            if (this.currentProjectName && this.currentProjectId && callback) {
+                callback(this.currentProjectName, this.getContents());
+            }
+        }, interval);
+
+        console.log(`Auto-save enabled (interval: ${interval}ms)`);
+    },
+
+    disableAutoSave() {
+        if (this.autoSaveInterval) {
+            clearInterval(this.autoSaveInterval);
+            this.autoSaveInterval = null;
+        }
+        this.autoSaveCallback = null;
+        console.log('Auto-save disabled');
+    },
+
     clear() {
         if (this.quill) {
             this.quill.setText('');
         }
         this.currentProjectName = null;
         this.currentProjectId = null;
+        this.disableAutoSave();
     }
 };

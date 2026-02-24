@@ -35,6 +35,7 @@ class User(Base):
     refresh_token = Column(String, nullable=True)  # Encrypted OAuth refresh token
     ocr_credits = Column(Integer, default=10)
     voice_credits_seconds = Column(Integer, default=120)
+    first_project_created = Column(Integer, default=0)  # 0 = false, 1 = true
 
 # Create all tables (if they don't exist yet)
 Base.metadata.create_all(bind=engine)
@@ -85,7 +86,8 @@ def get_or_create_user(db, user_info: dict, tokens: dict = None):
             name=name,
             picture=picture,
             ocr_credits=10,
-            voice_credits_seconds=120
+            voice_credits_seconds=120,
+            first_project_created=0
         )
     
     # Store or update tokens if provided
