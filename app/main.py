@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from app.services.auth import oauth
-from app.services.drive_client import list_projects, save_project, load_project
+from app.services.drive_client import list_projects, save_project, load_project, get_or_create_indicscribe_folder
 from app.database import get_db, get_or_create_user, User
 import tempfile
 import shutil
@@ -136,6 +136,15 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
         # Get or create the user in our database and store tokens
         user = get_or_create_user(db, user_info, tokens=tokens)
         logger.info(f"User {user.email} tokens stored - access: {bool(user.access_token)}, refresh: {bool(user.refresh_token)}")
+        
+        # Create IndicScribe folder in Google Drive during login
+        if user.access_token and user.refresh_token:
+            try:
+                folder_id = get_or_create_indicscribe_folder(user)
+                logger.info(f"IndicScribe folder ready for user {user.email}: {folder_id}")
+            except Exception as e:
+                logger.warning(f"Could not create IndicScribe folder for user {user.email}: {e}")
+                # Don't fail the login process if folder creation fails
         
         # Store user details in session cookie
         request.session['user_id'] = user.id

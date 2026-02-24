@@ -17,6 +17,8 @@ from app.database import User, decrypt_token
 
 logger = logging.getLogger("indic-scribe.drive")
 
+FOLDER_NAME = "IndicScribe"
+
 
 def get_drive_service(user: User):
     """
@@ -69,7 +71,7 @@ def list_projects(user: User) -> List[Dict[str, Any]]:
     """
     List all IndicScribe projects from the user's Google Drive.
     
-    Searches for files matching:
+    Searches for files in the IndicScribe folder matching:
     - mimeType = 'application/json'
     - name contains 'IndicScribe_'
     - trashed = false
@@ -87,8 +89,12 @@ def list_projects(user: User) -> List[Dict[str, Any]]:
         return []
     
     try:
-        # Build the query
+        # Get the IndicScribe folder ID
+        folder_id = get_or_create_indicscribe_folder(user)
+        
+        # Build the query to search within the folder
         query = (
+            f"'{folder_id}' in parents AND "
             "mimeType='application/json' AND "
             "name contains 'IndicScribe_' AND "
             "trashed=false"
@@ -122,7 +128,7 @@ def list_projects(user: User) -> List[Dict[str, Any]]:
 
 def save_project(user: User, filename: str, content_json: dict) -> Dict[str, Any]:
     """
-    Save or update a project file on Google Drive.
+    Save or update a project file on Google Drive in the IndicScribe folder.
     
     Creates a new file named 'IndicScribe_{filename}.json' or updates existing.
     
@@ -149,8 +155,11 @@ def save_project(user: User, filename: str, content_json: dict) -> Dict[str, Any
     file_name = f"IndicScribe_{filename}.json"
     
     try:
-        # Check if file already exists
-        query = f"name='{file_name}' AND mimeType='application/json' AND trashed=false"
+        # Get or create the IndicScribe folder
+        folder_id = get_or_create_indicscribe_folder(user)
+        
+        # Check if file already exists in the folder
+        query = f"'{folder_id}' in parents AND name='{file_name}' AND mimeType='application/json' AND trashed=false"
         existing = drive_service.files().list(
             q=query,
             spaces='drive',
@@ -175,19 +184,20 @@ def save_project(user: User, filename: str, content_json: dict) -> Dict[str, Any
                 fileId=file_id,
                 media_body=media
             ).execute()
-            logger.info(f"Updated project {file_name} for user {user.email}")
+            logger.info(f"Updated project {file_name} in IndicScribe folder for user {user.email}")
         else:
-            # Create new file
+            # Create new file in the folder
             file_metadata = {
                 'name': file_name,
-                'mimeType': 'application/json'
+                'mimeType': 'application/json',
+                'parents': [folder_id]
             }
             result = drive_service.files().create(
                 body=file_metadata,
                 media_body=media,
                 fields='id, name, webViewLink'
             ).execute()
-            logger.info(f"Created new project {file_name} for user {user.email}")
+            logger.info(f"Created new project {file_name} in IndicScribe folder for user {user.email}")
         
         return {
             'id': result.get('id'),
@@ -240,4 +250,56 @@ def load_project(user: User, file_id: str) -> dict:
         
     except Exception as e:
         logger.error(f"Error loading project {file_id} for user {user.email}: {e}")
+        raise
+
+
+def get_or_create_indicscribe_folder(user: User) -> str:
+    """
+    Get or create the IndicScribe folder in the user's Google Drive.
+    
+    Args:
+        user: User object with Drive credentials
+        
+    Returns:
+        str: The folder ID of the IndicScribe folder
+        
+    Raises:
+        ValueError: If user has no Drive credentials
+        Exception: If Drive API call fails
+    """
+    drive_service = get_drive_service(user)
+    
+    try:
+        # Check if IndicScribe folder already exists
+        query = f"name='{FOLDER_NAME}' AND mimeType='application/vnd.google-apps.folder' AND trashed=false"
+        results = drive_service.files().list(
+            q=query,
+            spaces='drive',
+            fields='files(id, name)',
+            pageSize=1
+        ).execute()
+        
+        files = results.get('files', [])
+        if files:
+            folder_id = files[0]['id']
+            logger.info(f"Found existing IndicScribe folder {folder_id} for user {user.email}")
+            return folder_id
+        
+        # Create new folder if it doesn't exist
+        file_metadata = {
+            'name': FOLDER_NAME,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        
+        folder = drive_service.files().create(
+            body=file_metadata,
+            fields='id, name'
+        ).execute()
+        
+        folder_id = folder.get('id')
+        logger.info(f"Created new IndicScribe folder {folder_id} for user {user.email}")
+        return folder_id
+        
+    except Exception as e:
+        logger.error(f"Error getting/creating IndicScribe folder for user {user.email}: {e}")
         raise
