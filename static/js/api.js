@@ -38,13 +38,15 @@ export const api = {
         return await response.json();
     },
 
-    async saveProject(projectName, content) {
+    async saveProject(projectName, content, fileName = null, fileData = null) {
         const response = await fetch('/api/projects', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: projectName,
-                content: content
+                content: content,
+                file_name: fileName,
+                file_data: fileData
             })
         });
 
@@ -70,13 +72,15 @@ export const api = {
         return await response.json();
     },
 
-    async createFirstProject(projectName, content) {
+    async createFirstProject(projectName, content, fileName = null, fileData = null) {
         const response = await fetch('/api/projects/first', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: projectName,
-                content: content
+                content: content,
+                file_name: fileName,
+                file_data: fileData
             })
         });
 
@@ -88,19 +92,35 @@ export const api = {
         return await response.json();
     },
 
-    async autoSaveProject(projectName, content) {
+    async autoSaveProject(projectName, content, fileName = null, fileData = null) {
         const response = await fetch('/api/projects/auto-save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: projectName,
-                content: content
+                content: content,
+                file_name: fileName,
+                file_data: fileData
             })
         });
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({ detail: 'Failed to auto-save project' }));
             throw new Error(error.detail || 'Failed to auto-save project');
+        }
+
+        return await response.json();
+    },
+
+    async downloadUploadedFile(projectId, uploadedFileId) {
+        const response = await fetch(`/api/projects/${projectId}/file/${uploadedFileId}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Failed to download file' }));
+            throw new Error(error.detail || 'Failed to download file');
         }
 
         return await response.json();

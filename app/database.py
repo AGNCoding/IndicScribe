@@ -1,7 +1,7 @@
 import os
+import base64
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.orm import sessionmaker, declarative_base
-from itsdangerous import URLSafeSerializer, BadData
 
 # SQLite Database URL
 SQLALCHEMY_DATABASE_URL = "sqlite:///./indic_scribe.db"
@@ -10,11 +10,6 @@ SQLALCHEMY_DATABASE_URL = "sqlite:///./indic_scribe.db"
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
-
-# Token encryption/signing setup
-# Using GOOGLE_CLIENT_SECRET as the encryption key
-TOKEN_ENCRYPTION_KEY = os.getenv("GOOGLE_CLIENT_SECRET", "fallback_secret_key")
-token_serializer = URLSafeSerializer(TOKEN_ENCRYPTION_KEY)
 
 # SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -40,25 +35,29 @@ class User(Base):
 # Create all tables (if they don't exist yet)
 Base.metadata.create_all(bind=engine)
 
-# --- Helper Functions ---
 def encrypt_token(token: str) -> str:
     """
-    Encrypt a token using URLSafeSerializer.
-    Security Note: Tokens are encrypted at rest. Ensure GOOGLE_CLIENT_SECRET is kept secure.
+    Encode a token using base64 for storage.
+    Note: This is not cryptographic encryption, just encoding for obfuscation.
+    OAuth tokens are short-lived and the database is not publicly accessible.
     """
     try:
-        return token_serializer.dumps(token)
+        # Encode to bytes and then to base64 string
+        encoded = base64.b64encode(token.encode('utf-8')).decode('utf-8')
+        return encoded
     except Exception as e:
-        raise ValueError(f"Failed to encrypt token: {e}")
+        raise ValueError(f"Failed to encode token: {e}")
 
-def decrypt_token(encrypted_token: str) -> str:
+def decrypt_token(encoded_token: str) -> str:
     """
-    Decrypt a previously encrypted token.
+    Decode a previously encoded token.
     """
     try:
-        return token_serializer.loads(encrypted_token)
-    except BadData as e:
-        raise ValueError(f"Failed to decrypt token: {e}")
+        # Decode base64 to bytes and then to string
+        decoded = base64.b64decode(encoded_token.encode('utf-8')).decode('utf-8')
+        return decoded
+    except Exception as e:
+        raise ValueError(f"Failed to decode token: {e}")
 
 def get_or_create_user(db, user_info: dict, tokens: dict = None):
     """

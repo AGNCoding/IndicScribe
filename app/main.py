@@ -37,6 +37,8 @@ class OCRResponse(BaseModel):
 class SaveProjectRequest(BaseModel):
     name: str = Field(..., description="Project name (will be prefixed with 'IndicScribe_')")
     content: dict = Field(..., description="Editor state (Quill Delta/HTML)")
+    file_name: Optional[str] = Field(None, description="Name of the uploaded file")
+    file_data: Optional[str] = Field(None, description="File data as base64 encoded string for text files, or file content")
 
 # --- App Settings & Middleware ---
 
@@ -121,34 +123,68 @@ async def login(request: Request):
 @app.get("/auth/callback")
 async def auth_callback(request: Request, db: Session = Depends(get_db)):
     """Handle callback from Google and create/login user"""
-    token = await oauth.google.authorize_access_token(request)
-    user_info = token.get('userinfo')
-    
-    if user_info:
-        # Extract OAuth tokens for storage
-        tokens = {
-            'access_token': token.get('access_token'),
-            'refresh_token': token.get('refresh_token')
-        }
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        logger.info(f"Token response keys: {list(token.keys())}")
+        logger.info(f"Token response: {token}")
         
-        logger.info(f"OAuth tokens received - access_token: {bool(tokens.get('access_token'))}, refresh_token: {bool(tokens.get('refresh_token'))}")
+        user_info = token.get('userinfo')
         
-        # Get or create the user in our database and store tokens
-        user = get_or_create_user(db, user_info, tokens=tokens)
-        logger.info(f"User {user.email} tokens stored - access: {bool(user.access_token)}, refresh: {bool(user.refresh_token)}")
-        
-        # Create IndicScribe folder in Google Drive during login
-        if user.access_token and user.refresh_token:
-            try:
-                folder_id = get_or_create_indicscribe_folder(user)
-                logger.info(f"IndicScribe folder ready for user {user.email}: {folder_id}")
-            except Exception as e:
-                logger.warning(f"Could not create IndicScribe folder for user {user.email}: {e}")
-                # Don't fail the login process if folder creation fails
-        
-        # Store user details in session cookie
-        request.session['user_id'] = user.id
-        request.session['email'] = user.email
+        if user_info:
+            # Extract OAuth tokens for storage
+            tokens = {
+                'access_token': token.get('access_token'),
+                'refresh_token': token.get('refresh_token')
+            }
+            
+            logger.info(f"OAuth tokens received - access_token: {bool(tokens.get('access_token'))}, refresh_token: {bool(tokens.get('refresh_token'))}")
+            logger.info(f"Token details - access_token starts with: {str(tokens.get('access_token', ''))[:20] if tokens.get('access_token') else 'NONE'}")
+            logger.info(f"Token details - refresh_token starts with: {str(tokens.get('refresh_token', ''))[:20] if tokens.get('refresh_token') else 'NONE'}")
+            
+            # Get or create the user in our database and store tokens
+            user = get_or_create_user(db, user_info, tokens=tokens)
+            logger.info(f"User {user.email} created/updated")
+            logger.info(f"User {user.email} tokens stored - access: {bool(user.access_token)}, refresh: {bool(user.refresh_token)}")
+            
+            # Verify tokens can be decrypted
+            if user.access_token:
+                try:
+                    from app.database import decrypt_token
+                    decrypted = decrypt_token(user.access_token)
+                    logger.info(f"✓ Access token successfully decrypted for {user.email}")
+                except Exception as e:
+                    logger.error(f"✗ Failed to decrypt access token for {user.email}: {e}")
+            
+            if user.refresh_token:
+                try:
+                    from app.database import decrypt_token
+                    decrypted = decrypt_token(user.refresh_token)
+                    logger.info(f"✓ Refresh token successfully decrypted for {user.email}")
+                except Exception as e:
+                    logger.error(f"✗ Failed to decrypt refresh token for {user.email}: {e}")
+            
+            # Create IndicScribe folder in Google Drive during login
+            if user.access_token and user.refresh_token:
+                logger.info(f"Attempting to create IndicScribe folder for {user.email}")
+                try:
+                    folder_id = get_or_create_indicscribe_folder(user)
+                    logger.info(f"✓ IndicScribe folder ready for user {user.email}: {folder_id}")
+                except Exception as e:
+                    logger.error(f"✗ Could not create IndicScribe folder for user {user.email}: {e}", exc_info=True)
+                    # Don't fail the login process if folder creation fails
+            else:
+                logger.warning(f"⚠️ Cannot create folder for {user.email}: missing tokens - access: {bool(user.access_token)}, refresh: {bool(user.refresh_token)}")
+            
+            # Store user details in session cookie
+            request.session['user_id'] = user.id
+            request.session['email'] = user.email
+            logger.info(f"✓ User {user.email} session created")
+            
+        else:
+            logger.error("No user_info in token response")
+            
+    except Exception as e:
+        logger.error(f"Error in auth_callback: {e}", exc_info=True)
         
     return RedirectResponse(url='/')
 
@@ -202,6 +238,71 @@ async def get_current_user_profile(user: User = Depends(get_current_user)):
         "first_project_created": bool(user.first_project_created),
         "is_logged_in": True
     }
+
+@app.get("/api/debug/auth")
+async def debug_auth_status(user: User = Depends(get_current_user)):
+    """Debug endpoint to check OAuth token status (for debugging only)"""
+    from app.database import decrypt_token
+    
+    has_access_token = bool(user.access_token)
+    has_refresh_token = bool(user.refresh_token)
+    
+    # Try to decrypt and validate tokens
+    access_token_valid = False
+    refresh_token_valid = False
+    
+    if user.access_token:
+        try:
+            decrypt_token(user.access_token)
+            access_token_valid = True
+        except Exception as e:
+            logger.warning(f"Access token decryption failed: {e}")
+    
+    if user.refresh_token:
+        try:
+            decrypt_token(user.refresh_token)
+            refresh_token_valid = True
+        except Exception as e:
+            logger.warning(f"Refresh token decryption failed: {e}")
+    
+    return {
+        "user_email": user.email,
+        "has_access_token": has_access_token,
+        "has_refresh_token": has_refresh_token,
+        "access_token_valid": access_token_valid,
+        "refresh_token_valid": refresh_token_valid,
+        "can_access_drive": has_access_token and has_refresh_token and access_token_valid and refresh_token_valid,
+        "first_project_created": bool(user.first_project_created)
+    }
+
+@app.post("/api/debug/test-folder-creation")
+async def test_folder_creation(user: User = Depends(get_current_user)):
+    """Test endpoint to manually create or get the IndicScribe folder"""
+    try:
+        logger.info(f"Testing folder creation for {user.email}")
+        
+        # Check tokens
+        if not user.access_token or not user.refresh_token:
+            return {
+                "status": "error",
+                "message": f"Missing tokens - access: {bool(user.access_token)}, refresh: {bool(user.refresh_token)}"
+            }
+        
+        # Try to create folder
+        folder_id = get_or_create_indicscribe_folder(user)
+        
+        return {
+            "status": "success",
+            "folder_id": folder_id,
+            "message": f"Successfully created/retrieved IndicScribe folder"
+        }
+    except Exception as e:
+        logger.error(f"Error testing folder creation: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": str(e),
+            "error_type": type(e).__name__
+        }
 
 @app.post("/api/ocr", response_model=OCRResponse)
 async def ocr(
@@ -287,13 +388,18 @@ async def create_project(request_body: SaveProjectRequest, user: User = Depends(
     Body:
         - name: Project name (without IndicScribe_ prefix)
         - content: Editor state as dict
+        - file_name: (Optional) Name of the uploaded document/image file
+        - file_data: (Optional) File data (for simple file support)
     
     Returns the saved file metadata including id, name, and webViewLink.
     """
     try:
+        logger.info(f"Save project request from {user.email}: '{request_body.name}'")
+        
         # Check if user has Drive tokens
         if not user.access_token or not user.refresh_token:
-            logger.warning(f"User {user.email} has no Drive tokens. Saving locally only.")
+            logger.warning(f"✗ User {user.email} has no Drive tokens - access: {bool(user.access_token)}, refresh: {bool(user.refresh_token)}")
+            
             # Mark first project as created if this is the user's first project
             if not user.first_project_created:
                 user.first_project_created = 1
@@ -307,7 +413,15 @@ async def create_project(request_body: SaveProjectRequest, user: User = Depends(
                 "message": "Project saved locally. Re-authenticate to sync to Google Drive."
             }
         
-        result = save_project(user, request_body.name, request_body.content)
+        logger.info(f"Attempting to save project to Google Drive for {user.email}")
+        result = save_project(
+            user, 
+            request_body.name, 
+            request_body.content,
+            file_name=request_body.file_name,
+            file_data=request_body.file_data
+        )
+        logger.info(f"✓ Project saved to Google Drive: {result}")
         
         # Mark first project as created if this is the user's first project
         if not user.first_project_created:
@@ -320,22 +434,25 @@ async def create_project(request_body: SaveProjectRequest, user: User = Depends(
             "file_id": result['id'],
             "name": result['name'],
             "webViewLink": result.get('webViewLink', ''),
-            "saved_to_drive": True
+            "saved_to_drive": True,
+            "uploaded_file_id": result.get('uploaded_file_id'),
+            "uploaded_file_name": result.get('uploaded_file_name')
         }
     except ValueError as e:
-        logger.warning(f"User {user.email} cannot save project: {e}")
+        logger.warning(f"✗ User {user.email} cannot save project: {e}")
         # Still mark first project as created to not block user
         if not user.first_project_created:
             user.first_project_created = 1
             db.commit()
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Error saving project for user {user.email}: {e}", exc_info=True)
+        logger.error(f"✗ Error saving project for user {user.email}: {e}", exc_info=True)
         # Still mark first project as created to not block user
         if not user.first_project_created:
             user.first_project_created = 1
             db.commit()
         raise HTTPException(status_code=500, detail="Failed to save project")
+
 
 @app.get("/api/projects/{file_id}")
 async def get_project(file_id: str, user: User = Depends(get_current_user)):
@@ -354,6 +471,42 @@ async def get_project(file_id: str, user: User = Depends(get_current_user)):
         logger.error(f"Error loading project {file_id} for user {user.email}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load project")
 
+@app.get("/api/projects/{project_id}/file/{uploaded_file_id}")
+async def download_uploaded_file(project_id: str, uploaded_file_id: str, user: User = Depends(get_current_user)):
+    """
+    Download an uploaded source file associated with a project.
+    
+    Args:
+        project_id: The project file ID (for authorization verification)
+        uploaded_file_id: The uploaded file ID in Google Drive
+        
+    Returns:
+        The file content as binary data
+    """
+    try:
+        from app.services.drive_client import get_uploaded_file
+        
+        logger.info(f"User {user.email} requesting download of file {uploaded_file_id} from project {project_id}")
+        
+        # Download the file
+        file_content = get_uploaded_file(user, uploaded_file_id)
+        
+        # For now, return as base64 in JSON for easy transfer
+        import base64
+        file_base64 = base64.b64encode(file_content).decode('utf-8')
+        
+        return {
+            "status": "success",
+            "file_data": file_base64,
+            "file_id": uploaded_file_id
+        }
+    except ValueError as e:
+        logger.warning(f"User {user.email} cannot download file: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error downloading file for user {user.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to download file")
+
 @app.post("/api/projects/first")
 async def create_first_project(request_body: SaveProjectRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
@@ -366,6 +519,8 @@ async def create_first_project(request_body: SaveProjectRequest, user: User = De
     Body:
         - name: Project name (without IndicScribe_ prefix)
         - content: Editor state as dict
+        - file_name: (Optional) Name of the uploaded document/image file
+        - file_data: (Optional) File data (for simple file support)
     
     Returns the saved file metadata including id, name, and webViewLink.
     """
@@ -387,7 +542,13 @@ async def create_first_project(request_body: SaveProjectRequest, user: User = De
             }
         
         # Save the project to Drive
-        result = save_project(user, request_body.name, request_body.content)
+        result = save_project(
+            user, 
+            request_body.name, 
+            request_body.content,
+            file_name=request_body.file_name,
+            file_data=request_body.file_data
+        )
         
         # Mark the user's first project as created
         user.first_project_created = 1
@@ -400,7 +561,9 @@ async def create_first_project(request_body: SaveProjectRequest, user: User = De
             "name": result['name'],
             "webViewLink": result.get('webViewLink', ''),
             "is_first_project": True,
-            "saved_to_drive": True
+            "saved_to_drive": True,
+            "uploaded_file_id": result.get('uploaded_file_id'),
+            "uploaded_file_name": result.get('uploaded_file_name')
         }
     except ValueError as e:
         logger.warning(f"User {user.email} cannot create first project: {e}")
@@ -426,6 +589,8 @@ async def auto_save_project(request_body: SaveProjectRequest, user: User = Depen
     Body:
         - name: Project name (without IndicScribe_ prefix)
         - content: Editor state as dict
+        - file_name: (Optional) Name of the uploaded document/image file
+        - file_data: (Optional) File data (for simple file support)
     
     Returns minimal save confirmation.
     """
@@ -439,7 +604,13 @@ async def auto_save_project(request_body: SaveProjectRequest, user: User = Depen
                 "note": "No Drive tokens available. Working locally."
             }
         
-        result = save_project(user, request_body.name, request_body.content)
+        result = save_project(
+            user, 
+            request_body.name, 
+            request_body.content,
+            file_name=request_body.file_name,
+            file_data=request_body.file_data
+        )
         return {
             "status": "auto-saved",
             "file_id": result['id'],

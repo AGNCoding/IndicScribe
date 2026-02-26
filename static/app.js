@@ -151,6 +151,23 @@ async function checkAuthStatus() {
             // Set the first project created flag
             isFirstProjectCreated = user.first_project_created;
 
+            // Debug: Check token status for Drive access
+            console.log('Checking Drive token status...');
+            try {
+                const debugResponse = await fetch('/api/debug/auth');
+                if (debugResponse.ok) {
+                    const debugInfo = await debugResponse.json();
+                    console.log('Auth Debug Info:', debugInfo);
+                    if (!debugInfo.can_access_drive) {
+                        console.warn('⚠️ Cannot access Google Drive - tokens missing or invalid');
+                        console.warn(`  - Access token: ${debugInfo.has_access_token} (valid: ${debugInfo.access_token_valid})`);
+                        console.warn(`  - Refresh token: ${debugInfo.has_refresh_token} (valid: ${debugInfo.refresh_token_valid})`);
+                    }
+                }
+            } catch (err) {
+                console.warn('Debug endpoint not available:', err);
+            }
+
             // Authenticated: show dashboard, hide hero and app
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('app-view').classList.add('hidden');
@@ -508,12 +525,14 @@ function escapeHtml(text) {
 function switchToDashboard() {
     document.getElementById('app-view').classList.add('hidden');
     document.getElementById('dashboard-view').classList.remove('hidden');
+    document.getElementById('saveProjectBtn').classList.add('hidden');
     loadProjectsList();
 }
 
 function switchToEditor() {
     document.getElementById('dashboard-view').classList.add('hidden');
     document.getElementById('app-view').classList.remove('hidden');
+    document.getElementById('saveProjectBtn').classList.remove('hidden');
 }
 
 async function createNewProject() {
@@ -534,20 +553,108 @@ async function openProject(project) {
     try {
         const response = await api.loadProject(project.id);
         const content = response.content;
-
+        
+        // Extract actual content and uploaded file metadata
+        let uploadedFileInfo = null;
+        let actualContent = content;
+        
         if (content && typeof content === 'object') {
-            editor.setContents(content);
+            // Check if there's uploaded file metadata
+            if (content._uploaded_file) {
+                uploadedFileInfo = content._uploaded_file;
+                // Remove the metadata from the content before setting
+                const contentCopy = { ...content };
+                delete contentCopy._uploaded_file;
+                actualContent = contentCopy;
+            }
+            
+            editor.setContents(actualContent);
         } else {
-            editor.setText(JSON.stringify(content, null, 2));
+            editor.setText(JSON.stringify(actualContent, null, 2));
         }
 
         editor.currentProjectName = project.name.replace('IndicScribe_', '').replace('.json', '');
         editor.currentProjectId = project.id;
 
+        // Load and restore the uploaded file if it exists
+        if (uploadedFileInfo && uploadedFileInfo.id) {
+            try {
+                ui.showSpinner('Loading uploaded file...');
+                console.log('Downloading uploaded file:', uploadedFileInfo.name);
+                
+                const fileResponse = await api.downloadUploadedFile(project.id, uploadedFileInfo.id);
+                
+                if (fileResponse.status === 'success' && fileResponse.file_data) {
+                    // Convert base64 back to Blob
+                    const binaryString = atob(fileResponse.file_data);
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    
+                    // Create a File object from the Blob
+                    const blob = new Blob([bytes], { type: uploadedFileInfo.mimeType });
+                    const file = new File([blob], uploadedFileInfo.name, { type: uploadedFileInfo.mimeType });
+                    
+                    // Add file to tabs and determine page count
+                    let pages = 1;
+                    if (uploadedFileInfo.mimeType === 'application/pdf') {
+                        try {
+                            pages = await pdf.getPageCount(file);
+                        } catch (err) {
+                            console.warn('Could not get PDF page count:', err);
+                            pages = 1;
+                        }
+                    }
+                    
+                    const fileIndex = tabs.addFile(file, pages);
+                    console.log(`Restored file: ${uploadedFileInfo.name} (pages: ${pages})`);
+                    
+                    // Switch to the restored file
+                    switchTab(fileIndex);
+                    ui.notify(`Loaded: ${uploadedFileInfo.name}`, 'success');
+                } else {
+                    console.warn('No file data in response');
+                    ui.notify('Could not restore uploaded file', 'warning');
+                }
+            } catch (err) {
+                console.error('Error downloading uploaded file:', err);
+                ui.notify(`File could not be restored: ${err.message}`, 'warning');
+            }
+        }
+
         // Enable auto-save for this project
         editor.enableAutoSave(async (projectName, contents) => {
             try {
-                await api.autoSaveProject(projectName, contents);
+                // Include current file if available
+                let autoSaveFileName = null;
+                let autoSaveFileData = null;
+                const currentFile = tabs.getActiveFile();
+                if (currentFile && currentFile.file) {
+                    autoSaveFileName = currentFile.file.name;
+                    try {
+                        const autoFileBuffer = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = (e) => resolve(e.target.result);
+                            reader.onerror = reject;
+                            reader.readAsArrayBuffer(currentFile.file);
+                        });
+                        
+                        if (autoFileBuffer instanceof ArrayBuffer) {
+                            const bytes = new Uint8Array(autoFileBuffer);
+                            let binaryString = '';
+                            for (let i = 0; i < bytes.byteLength; i++) {
+                                binaryString += String.fromCharCode(bytes[i]);
+                            }
+                            autoSaveFileData = btoa(binaryString);
+                        }
+                    } catch (err) {
+                        autoSaveFileName = null;
+                        autoSaveFileData = null;
+                    }
+                }
+                
+                await api.autoSaveProject(projectName, contents, autoSaveFileName, autoSaveFileData);
                 console.log('Project auto-saved');
             } catch (err) {
                 console.error('Auto-save failed:', err);
@@ -555,7 +662,15 @@ async function openProject(project) {
         }, 30000); // Auto-save every 30 seconds
 
         switchToEditor();
-        ui.notify(`Opened: ${project.name}`, 'success');
+        
+        // Show main success notification
+        const message = `Opened: ${project.name}`;
+        ui.notify(message, 'success');
+        
+        // Log uploaded file info for debugging
+        if (uploadedFileInfo) {
+            console.log('Project has associated file:', uploadedFileInfo);
+        }
     } catch (err) {
         ui.notify(`Failed to open project: ${err.message}`, 'error');
         console.error('Error opening project:', err);
@@ -565,6 +680,8 @@ async function openProject(project) {
 }
 
 async function saveProjectToDrive() {
+    console.log('saveProjectToDrive called');
+    
     if (!editor.currentProjectName) {
         const name = prompt('Enter project name:', 'My Project');
         if (!name) return;
@@ -574,9 +691,51 @@ async function saveProjectToDrive() {
     ui.showSpinner('Saving project...');
     
     try {
+        console.log('Getting editor contents...');
         const contents = editor.getContents();
-        const response = await api.saveProject(editor.currentProjectName, contents);
         
+        // Get the current file and convert to base64 if available
+        let fileName = null;
+        let fileData = null;
+        const activeFile = tabs.getActiveFile();
+        if (activeFile && activeFile.file) {
+            fileName = activeFile.file.name;
+            console.log(`Including file: ${fileName}`);
+            
+            try {
+                // Read the file as base64
+                fileData = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        // Get the base64 data
+                        resolve(e.target.result);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(activeFile.file);
+                });
+                
+                // Convert ArrayBuffer to base64
+                if (fileData instanceof ArrayBuffer) {
+                    const bytes = new Uint8Array(fileData);
+                    let binaryString = '';
+                    for (let i = 0; i < bytes.byteLength; i++) {
+                        binaryString += String.fromCharCode(bytes[i]);
+                    }
+                    fileData = btoa(binaryString);
+                }
+                console.log(`File converted to base64 (${fileData.length} chars)`);
+            } catch (err) {
+                console.warn('Could not read file:', err);
+                // Continue without file data
+                fileName = null;
+                fileData = null;
+            }
+        }
+        
+        console.log(`Calling api.saveProject with name: ${editor.currentProjectName}`);
+        const response = await api.saveProject(editor.currentProjectName, contents, fileName, fileData);
+        
+        console.log('API response:', response);
         editor.currentProjectId = response.file_id;
 
         // Mark first project as created if not already done (for manual saves)
@@ -587,9 +746,38 @@ async function saveProjectToDrive() {
         // Enable auto-save if not already enabled
         // Only enable if project was actually saved to Drive
         if (!editor.autoSaveInterval && response.saved_to_drive !== false) {
+            console.log('Enabling auto-save...');
             editor.enableAutoSave(async (projectName, contents) => {
                 try {
-                    await api.autoSaveProject(projectName, contents);
+                    // For auto-save, we also include the current file if available
+                    let fileName = null;
+                    let fileData = null;
+                    const activeFile = tabs.getActiveFile();
+                    if (activeFile && activeFile.file) {
+                        fileName = activeFile.file.name;
+                        try {
+                            const fileBuffer = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = (e) => resolve(e.target.result);
+                                reader.onerror = reject;
+                                reader.readAsArrayBuffer(activeFile.file);
+                            });
+                            
+                            if (fileBuffer instanceof ArrayBuffer) {
+                                const bytes = new Uint8Array(fileBuffer);
+                                let binaryString = '';
+                                for (let i = 0; i < bytes.byteLength; i++) {
+                                    binaryString += String.fromCharCode(bytes[i]);
+                                }
+                                fileData = btoa(binaryString);
+                            }
+                        } catch (err) {
+                            fileName = null;
+                            fileData = null;
+                        }
+                    }
+                    
+                    await api.autoSaveProject(projectName, contents, fileName, fileData);
                     console.log('Project auto-saved');
                 } catch (err) {
                     console.error('Auto-save failed:', err);
@@ -601,6 +789,7 @@ async function saveProjectToDrive() {
             ? `✓ Project saved locally: ${response.name}\n(Re-authenticate to sync to Google Drive)`
             : `✓ Project saved to Google Drive: ${response.name}`;
         
+        console.log('Showing notification:', message);
         ui.notify(message, 'success');
         
         // Brief visual feedback - add a checkmark animation to the save button
@@ -612,8 +801,8 @@ async function saveProjectToDrive() {
             }, 300);
         }
     } catch (err) {
+        console.error('Error in saveProjectToDrive:', err);
         ui.notify(`Failed to save project: ${err.message}`, 'error');
-        console.error('Error saving project:', err);
     } finally {
         ui.hideSpinner();
     }
@@ -624,6 +813,12 @@ function setupProjectManagement() {
     const createBtn = document.getElementById('createNewProjectBtn');
     if (createBtn) {
         createBtn.addEventListener('click', createNewProject);
+    }
+
+    // Save Project button in navbar
+    const saveBtn = document.getElementById('saveProjectBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveProjectToDrive);
     }
 
     // Save to Drive custom event from editor toolbar
@@ -642,7 +837,43 @@ async function handleFirstProjectCreation() {
     
     try {
         const contents = editor.getContents();
-        const response = await api.createFirstProject(projectName, contents);
+        
+        // Get the current file and convert to base64 if available
+        let fileName = null;
+        let fileData = null;
+        const activeFile = tabs.getActiveFile();
+        if (activeFile && activeFile.file) {
+            fileName = activeFile.file.name;
+            console.log(`Including file in first project: ${fileName}`);
+            
+            try {
+                // Read the file as base64
+                const fileBuffer = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(activeFile.file);
+                });
+                
+                // Convert ArrayBuffer to base64
+                if (fileBuffer instanceof ArrayBuffer) {
+                    const bytes = new Uint8Array(fileBuffer);
+                    let binaryString = '';
+                    for (let i = 0; i < bytes.byteLength; i++) {
+                        binaryString += String.fromCharCode(bytes[i]);
+                    }
+                    fileData = btoa(binaryString);
+                }
+                console.log(`File converted to base64 (${fileData.length} chars)`);
+            } catch (err) {
+                console.warn('Could not read file:', err);
+                // Continue without file data
+                fileName = null;
+                fileData = null;
+            }
+        }
+        
+        const response = await api.createFirstProject(projectName, contents, fileName, fileData);
         
         editor.currentProjectId = response.file_id;
         isFirstProjectCreated = true;
@@ -652,7 +883,35 @@ async function handleFirstProjectCreation() {
         if (response.saved_to_drive !== false) {
             editor.enableAutoSave(async (projectName, contents) => {
                 try {
-                    await api.autoSaveProject(projectName, contents);
+                    // For auto-save, include current file if available
+                    let autoSaveFileName = null;
+                    let autoSaveFileData = null;
+                    const currentFile = tabs.getActiveFile();
+                    if (currentFile && currentFile.file) {
+                        autoSaveFileName = currentFile.file.name;
+                        try {
+                            const autoFileBuffer = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = (e) => resolve(e.target.result);
+                                reader.onerror = reject;
+                                reader.readAsArrayBuffer(currentFile.file);
+                            });
+                            
+                            if (autoFileBuffer instanceof ArrayBuffer) {
+                                const bytes = new Uint8Array(autoFileBuffer);
+                                let binaryString = '';
+                                for (let i = 0; i < bytes.byteLength; i++) {
+                                    binaryString += String.fromCharCode(bytes[i]);
+                                }
+                                autoSaveFileData = btoa(binaryString);
+                            }
+                        } catch (err) {
+                            autoSaveFileName = null;
+                            autoSaveFileData = null;
+                        }
+                    }
+                    
+                    await api.autoSaveProject(projectName, contents, autoSaveFileName, autoSaveFileData);
                     console.log('Project auto-saved');
                 } catch (err) {
                     console.error('Auto-save failed:', err);
