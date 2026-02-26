@@ -56,7 +56,7 @@ def get_drive_service(user: User):
         token_uri='https://oauth2.googleapis.com/token',
         client_id=os.getenv("GOOGLE_CLIENT_ID"),
         client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-        scopes=['https://www.googleapis.com/auth/drive.file']
+        scopes=['https://www.googleapis.com/auth/drive']
     )
     
     # Refresh the access token if needed
@@ -94,7 +94,33 @@ def list_projects(user: User) -> List[Dict[str, Any]]:
     
     try:
         # Get the IndicScribe folder ID
-        folder_id = get_or_create_indicscribe_folder(user)
+        try:
+            folder_id = get_or_create_indicscribe_folder(user)
+        except Exception as e:
+            logger.warning(f"Could not get/create IndicScribe folder for user {user.email}: {e}")
+            logger.info(f"Attempting to list projects without folder ID for user {user.email}")
+            # Try to find projects without folder constraint
+            query = (
+                "mimeType='application/json' AND "
+                "name contains 'IndicScribe_' AND "
+                "trashed=false"
+            )
+            results = drive_service.files().list(
+                q=query,
+                spaces='drive',
+                fields='files(id, name, createdTime)',
+                pageSize=100
+            ).execute()
+            files = results.get('files', [])
+            logger.info(f"Retrieved {len(files)} projects for user {user.email} (without folder constraint)")
+            return [
+                {
+                    'id': file['id'],
+                    'name': file['name'],
+                    'createdTime': file.get('createdTime', '')
+                }
+                for file in files
+            ]
         
         # Build the query to search within the folder
         query = (
@@ -127,7 +153,8 @@ def list_projects(user: User) -> List[Dict[str, Any]]:
         
     except Exception as e:
         logger.error(f"Error listing projects for user {user.email}: {e}")
-        raise
+        logger.warning(f"Returning empty projects list for user {user.email}")
+        return []
 
 
 def save_project(user: User, filename: str, content_json: dict, file_name: Optional[str] = None, file_data: Optional[str] = None) -> Dict[str, Any]:

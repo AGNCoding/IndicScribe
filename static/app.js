@@ -15,6 +15,7 @@ import { collapsible } from './js/collapsible.js';
 let dictation;
 let transliteration;
 let isFirstProjectCreated = false;
+let currentView = 'login'; // Track current view: 'login', 'dashboard', 'editor'
 
 // ==================== Initialization ====================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -93,11 +94,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // File Upload event listeners (moved inside DOMContentLoaded)
     const fileInput = document.getElementById('fileInput');
     document.getElementById('uploadBtn').addEventListener('click', () => {
-        // Hard check: prevent opening file picker if not authenticated
-        if (document.getElementById('app-view').classList.contains('hidden')) {
+        // Check if in editor view (based on state, not DOM)
+        if (currentView === 'login') {
             ui.notify('Please log in to upload files.', 'error');
             return;
         }
+        
+        if (currentView === 'dashboard') {
+            ui.notify('Create or open a project first to upload files.', 'info');
+            return;
+        }
+        
+        // In editor view, open file picker
         fileInput.click();
     });
 
@@ -146,6 +154,7 @@ async function checkAuthStatus() {
             document.getElementById('app-view').classList.add('hidden');
             document.getElementById('dashboard-view').classList.add('hidden');
             document.getElementById('login-view').classList.remove('hidden');
+            currentView = 'login';
         } else if (response.ok) {
             const user = await response.json();
             // Set the first project created flag
@@ -172,6 +181,7 @@ async function checkAuthStatus() {
             document.getElementById('login-view').classList.add('hidden');
             document.getElementById('app-view').classList.add('hidden');
             document.getElementById('dashboard-view').classList.remove('hidden');
+            currentView = 'dashboard';
 
             document.getElementById('userAvatar').src = user.picture || 'https://via.placeholder.com/150';
             document.getElementById('userName').textContent = user.name || user.email;
@@ -474,8 +484,9 @@ async function loadProjectsList() {
         });
     } catch (err) {
         loadingState.classList.add('hidden');
-        ui.notify('Failed to load projects', 'error');
         console.error('Error loading projects:', err);
+        const errorMsg = err.message || 'Failed to load projects';
+        ui.notify(errorMsg, 'error');
     }
 }
 
@@ -526,6 +537,7 @@ function switchToDashboard() {
     document.getElementById('app-view').classList.add('hidden');
     document.getElementById('dashboard-view').classList.remove('hidden');
     document.getElementById('saveProjectBtn').classList.add('hidden');
+    currentView = 'dashboard';
     loadProjectsList();
 }
 
@@ -533,6 +545,7 @@ function switchToEditor() {
     document.getElementById('dashboard-view').classList.add('hidden');
     document.getElementById('app-view').classList.remove('hidden');
     document.getElementById('saveProjectBtn').classList.remove('hidden');
+    currentView = 'editor';
 }
 
 async function createNewProject() {

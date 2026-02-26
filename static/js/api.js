@@ -31,8 +31,12 @@ export const api = {
         });
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ detail: 'Failed to fetch projects' }));
-            throw new Error(error.detail || 'Failed to fetch projects');
+            try {
+                const error = await response.json();
+                throw new Error(error.detail || `Failed to fetch projects (${response.status})`);
+            } catch (e) {
+                throw new Error(e.message || `Failed to fetch projects (${response.status})`);
+            }
         }
 
         return await response.json();
