@@ -101,34 +101,35 @@ body {
 #sourceViewer {
     max-height: 800px;
     background-color: var(--bg-primary);
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: auto;
+    /* Allow both horizontal and vertical scrolling if zoomed */
+    position: relative;
 }
 
 #sourceViewer::-webkit-scrollbar {
     width: 8px;
+    height: 8px;
 }
 
-#sourceViewer::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 10px;
+#sourceViewer .zoom-container {
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    margin: 0 auto;
 }
 
-#sourceViewer::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 10px;
-}
-
-#sourceViewer::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
-
-#sourceViewer canvas,
-#sourceViewer img {
+#sourceViewer img,
+#sourceViewer .flex-col {
+    /* Container for PDF pages */
     max-width: 100%;
     height: auto;
-    object-fit: contain;
-    margin: auto;
+    margin: 0 auto;
+    display: block;
+}
+
+#zoomLevelDisplay {
+    font-variant-numeric: tabular-nums;
 }
 
 #tabsContainer {

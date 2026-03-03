@@ -108,15 +108,7 @@
                     Run OCR
                 </button>
 
-                <!-- Save Project Button -->
-                <button id="saveProjectBtn"
-                    class="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium hidden"
-                    title="Save Project (Ctrl+S)">
-                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-                    </svg>
-                    Save
-                </button>
+
 
 
                 <!-- Theme Toggle -->
@@ -206,7 +198,8 @@
     </div>
 
     <!-- Dashboard View (Project Management) -->
-    <div id="dashboard-view" class="hidden min-h-[calc(100vh-140px)] bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-800">
+    <div id="dashboard-view"
+        class="hidden min-h-[calc(100vh-140px)] bg-gradient-to-br from-gray-50 to-gray-100 dark:from-slate-900 dark:to-slate-800">
         <main class="max-w-7xl mx-auto px-4 py-8">
             <!-- Dashboard Header -->
             <div class="mb-12">
@@ -220,9 +213,12 @@
                 <button id="createNewProjectBtn"
                     class="group relative h-48 bg-white dark:bg-slate-800 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border-2 border-dashed border-blue-300 dark:border-blue-700 hover:border-blue-500 flex flex-col items-center justify-center cursor-pointer">
                     <div class="text-center">
-                        <div class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
-                            <svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        <div
+                            class="inline-flex items-center justify-center w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/50 transition-colors">
+                            <svg class="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 4v16m8-8H4" />
                             </svg>
                         </div>
                         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Create New Project</h3>
@@ -237,7 +233,8 @@
             <!-- Empty State -->
             <div id="emptyState" class="hidden text-center py-16">
                 <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No projects yet</h3>
                 <p class="text-gray-600 dark:text-gray-400">Create a new project to get started</p>
@@ -245,7 +242,8 @@
 
             <!-- Loading State -->
             <div id="loadingState" class="hidden text-center py-16">
-                <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4">
+                <div
+                    class="inline-flex items-center justify-center w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full mb-4">
                     <div class="spinner"></div>
                 </div>
                 <p class="text-gray-600 dark:text-gray-400 font-medium">Loading your projects...</p>
@@ -319,6 +317,38 @@
                             <div id="tabsContainer" class="flex flex-wrap gap-2 overflow-x-auto pb-1">
                                 <!-- Tabs will be generated here -->
                             </div>
+
+                            <!-- Zoom Controls -->
+                            <div
+                                class="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg border border-gray-200 dark:border-slate-700 ml-2">
+                                <button id="zoomOutBtn"
+                                    class="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded transition-colors text-gray-600 dark:text-gray-400"
+                                    title="Zoom Out">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" />
+                                    </svg>
+                                </button>
+                                <span id="zoomLevelDisplay"
+                                    class="text-xs font-medium text-gray-500 dark:text-gray-400 min-w-[40px] text-center">100%</span>
+                                <button id="zoomInBtn"
+                                    class="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded transition-colors text-gray-600 dark:text-gray-400"
+                                    title="Zoom In">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                    </svg>
+                                </button>
+                                <button id="zoomResetBtn"
+                                    class="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded transition-colors text-gray-600 dark:text-gray-400 border-l border-gray-200 dark:border-slate-600"
+                                    title="Reset Zoom">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                </button>
+                            </div>
+
                             <button id="clearAllBtn"
                                 class="text-xs text-red-600 hover:text-white hover:bg-red-600 px-2 py-1 rounded border border-red-200 transition-colors ml-2 hidden">
                                 Clear All

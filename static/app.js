@@ -16,6 +16,10 @@ let dictation;
 let transliteration;
 let isFirstProjectCreated = false;
 let currentView = 'login'; // Track current view: 'login', 'dashboard', 'editor'
+let currentZoom = 1.0;
+const ZOOM_STEP = 0.1;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3.0;
 
 // ==================== Initialization ====================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -40,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Project Management Event Listeners
     setupProjectManagement();
+    setupZoomControls();
 
     // Input validation listeners
     ['startPage', 'endPage'].forEach(id => {
@@ -99,12 +104,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             ui.notify('Please log in to upload files.', 'error');
             return;
         }
-        
+
         if (currentView === 'dashboard') {
             ui.notify('Create or open a project first to upload files.', 'info');
             return;
         }
-        
+
         // In editor view, open file picker
         fileInput.click();
     });
@@ -136,13 +141,51 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!isFirstProjectCreated) {
                 await handleFirstProjectCreation();
             }
-        } catch (err) {
-            ui.notify(err.message, 'error');
         } finally {
             fileInput.value = '';
             ui.hideSpinner();
         }
     });
+
+    // Handle URL parameters for opening projects or creating new ones in separate tabs
+    const handleUrlParams = async () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const projectId = urlParams.get('project');
+        const action = urlParams.get('action');
+        const name = urlParams.get('name');
+
+        if (currentView !== 'login') {
+            if (projectId) {
+                console.log(`URL param: opening project ${projectId}`);
+                await openProject({ id: projectId, name: 'Loading...' });
+            } else if (action === 'new') {
+                const projectName = name || 'Untitled Project';
+                console.log(`URL param: creating new project "${projectName}"`);
+
+                editor.clear();
+                editor.currentProjectName = projectName;
+                editor.currentProjectId = null;
+
+                // Enable real-time auto-save for new project
+                editor.enableAutoSave(async (pName, contents) => {
+                    try {
+                        await api.autoSaveProject(pName, contents);
+                        console.log('Project auto-saved');
+                    } catch (err) {
+                        console.error('Auto-save failed:', err);
+                    }
+                });
+
+                switchToEditor();
+                ui.notify(`New project: ${projectName}`, 'success');
+            }
+        }
+    };
+
+    // Run param check after auth is settled
+    if (currentView !== 'login') {
+        await handleUrlParams();
+    }
 });
 
 // ==================== Authentication & User Profile ====================
@@ -177,11 +220,22 @@ async function checkAuthStatus() {
                 console.warn('Debug endpoint not available:', err);
             }
 
-            // Authenticated: show dashboard, hide hero and app
+            // Authenticated: determine initial view
+            const urlParams = new URLSearchParams(window.location.search);
+            const opensProject = urlParams.has('project') || urlParams.get('action') === 'new';
+
             document.getElementById('login-view').classList.add('hidden');
-            document.getElementById('app-view').classList.add('hidden');
-            document.getElementById('dashboard-view').classList.remove('hidden');
-            currentView = 'dashboard';
+
+            if (opensProject) {
+                // Project will be loaded by handleUrlParams, prepare app-view
+                document.getElementById('dashboard-view').classList.add('hidden');
+                document.getElementById('app-view').classList.remove('hidden');
+                currentView = 'editor';
+            } else {
+                document.getElementById('app-view').classList.add('hidden');
+                document.getElementById('dashboard-view').classList.remove('hidden');
+                currentView = 'dashboard';
+            }
 
             document.getElementById('userAvatar').src = user.picture || 'https://via.placeholder.com/150';
             document.getElementById('userName').textContent = user.name || user.email;
@@ -229,15 +283,21 @@ async function switchTab(index) {
     const fileObj = tabs.getActiveFile();
     if (!fileObj) {
         ui.sourceViewer.innerHTML = '';
+        resetZoom();
         return;
     }
 
     ui.showSpinner('Loading document...');
     ui.sourceViewer.innerHTML = '';
 
+    // Create zoom container
+    const zoomContainer = document.createElement('div');
+    zoomContainer.className = 'zoom-container';
+    ui.sourceViewer.appendChild(zoomContainer);
+
     try {
         if (fileObj.file.type === 'application/pdf') {
-            await pdf.renderPreview(fileObj.file, ui.sourceViewer);
+            await pdf.renderPreview(fileObj.file, zoomContainer);
         } else {
             // Clean up old object URL if any (optional but good practice)
             if (ui.sourceViewer._lastUrl) URL.revokeObjectURL(ui.sourceViewer._lastUrl);
@@ -249,15 +309,82 @@ async function switchTab(index) {
             img.src = url;
             img.className = 'w-full h-auto';
             img.draggable = false;
-            ui.sourceViewer.innerHTML = '';
-            ui.sourceViewer.appendChild(img);
-            ui.syncEditorHeight();
+            zoomContainer.appendChild(img);
         }
+
+        resetZoom(); // Start at 100% for new document
+        ui.syncEditorHeight();
     } finally {
         tabs.render(switchTab, removeFile);
         updateClearAllVisibility();
         ui.hideSpinner();
     }
+}
+
+// ==================== Zoom Management ====================
+function setupZoomControls() {
+    const zoomInBtn = document.getElementById('zoomInBtn');
+    const zoomOutBtn = document.getElementById('zoomOutBtn');
+    const zoomResetBtn = document.getElementById('zoomResetBtn');
+
+    if (zoomInBtn) {
+        zoomInBtn.onclick = () => {
+            currentZoom = Math.min(MAX_ZOOM, currentZoom + ZOOM_STEP);
+            applyZoom();
+        };
+    }
+    if (zoomOutBtn) {
+        zoomOutBtn.onclick = () => {
+            currentZoom = Math.max(MIN_ZOOM, currentZoom - ZOOM_STEP);
+            applyZoom();
+        };
+    }
+    if (zoomResetBtn) {
+        zoomResetBtn.onclick = () => {
+            resetZoom();
+        };
+    }
+
+    // Mouse scroll zoom (Ctrl + Wheel)
+    ui.sourceViewer.addEventListener('wheel', (e) => {
+        if (e.ctrlKey) {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                currentZoom = Math.min(MAX_ZOOM, currentZoom + ZOOM_STEP);
+            } else {
+                currentZoom = Math.max(MIN_ZOOM, currentZoom - ZOOM_STEP);
+            }
+            applyZoom();
+        }
+    }, { passive: false });
+}
+
+function applyZoom() {
+    const container = ui.sourceViewer.querySelector('.zoom-container');
+    const display = document.getElementById('zoomLevelDisplay');
+
+    if (container) {
+        // Use width for zooming to trigger scrollbars naturally
+        container.style.width = `${Math.round(currentZoom * 100)}%`;
+
+        // Reset transform if it was used before
+        container.style.transform = 'none';
+
+        // Ensure PDF pages stacked inside also grow
+        const pdfWrapper = container.querySelector('.flex-col');
+        if (pdfWrapper) {
+            pdfWrapper.style.width = '100%';
+        }
+    }
+
+    if (display) {
+        display.textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+}
+
+function resetZoom() {
+    currentZoom = 1.0;
+    applyZoom();
 }
 
 function removeFile(index) {
@@ -493,7 +620,7 @@ async function loadProjectsList() {
 function createProjectCard(project) {
     const card = document.createElement('div');
     card.className = 'group relative h-48 bg-white dark:bg-slate-800 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 flex flex-col p-6 cursor-pointer';
-    
+
     const createdDate = new Date(project.createdTime).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -516,7 +643,11 @@ function createProjectCard(project) {
 
     card.querySelector('button').addEventListener('click', (e) => {
         e.stopPropagation();
-        openProject(project);
+        window.open(`/?project=${project.id}`, '_blank');
+    });
+
+    card.addEventListener('click', () => {
+        window.open(`/?project=${project.id}`, '_blank');
     });
 
     return card;
@@ -536,7 +667,6 @@ function escapeHtml(text) {
 function switchToDashboard() {
     document.getElementById('app-view').classList.add('hidden');
     document.getElementById('dashboard-view').classList.remove('hidden');
-    document.getElementById('saveProjectBtn').classList.add('hidden');
     currentView = 'dashboard';
     loadProjectsList();
 }
@@ -544,7 +674,6 @@ function switchToDashboard() {
 function switchToEditor() {
     document.getElementById('dashboard-view').classList.add('hidden');
     document.getElementById('app-view').classList.remove('hidden');
-    document.getElementById('saveProjectBtn').classList.remove('hidden');
     currentView = 'editor';
 }
 
@@ -552,25 +681,21 @@ async function createNewProject() {
     const projectName = prompt('Enter project name:', 'Untitled Project');
     if (!projectName) return;
 
-    editor.clear();
-    editor.currentProjectName = projectName;
-    editor.currentProjectId = null;
-    
-    switchToEditor();
-    ui.notify(`New project: ${projectName}`, 'success');
+    // Open in separate tab
+    window.open(`/?action=new&name=${encodeURIComponent(projectName)}`, '_blank');
 }
 
 async function openProject(project) {
     ui.showSpinner('Opening project...');
-    
+
     try {
         const response = await api.loadProject(project.id);
         const content = response.content;
-        
+
         // Extract actual content and uploaded file metadata
         let uploadedFileInfo = null;
         let actualContent = content;
-        
+
         if (content && typeof content === 'object') {
             // Check if there's uploaded file metadata
             if (content._uploaded_file) {
@@ -580,13 +705,14 @@ async function openProject(project) {
                 delete contentCopy._uploaded_file;
                 actualContent = contentCopy;
             }
-            
+
             editor.setContents(actualContent);
         } else {
             editor.setText(JSON.stringify(actualContent, null, 2));
         }
 
-        editor.currentProjectName = project.name.replace('IndicScribe_', '').replace('.json', '');
+        const displayName = response.name || (project.name ? project.name.replace('IndicScribe_', '').replace('.json', '') : 'Project');
+        editor.currentProjectName = displayName.replace('IndicScribe_', '').replace('.json', '');
         editor.currentProjectId = project.id;
 
         // Load and restore the uploaded file if it exists
@@ -594,9 +720,9 @@ async function openProject(project) {
             try {
                 ui.showSpinner('Loading uploaded file...');
                 console.log('Downloading uploaded file:', uploadedFileInfo.name);
-                
+
                 const fileResponse = await api.downloadUploadedFile(project.id, uploadedFileInfo.id);
-                
+
                 if (fileResponse.status === 'success' && fileResponse.file_data) {
                     // Convert base64 back to Blob
                     const binaryString = atob(fileResponse.file_data);
@@ -604,11 +730,11 @@ async function openProject(project) {
                     for (let i = 0; i < binaryString.length; i++) {
                         bytes[i] = binaryString.charCodeAt(i);
                     }
-                    
+
                     // Create a File object from the Blob
                     const blob = new Blob([bytes], { type: uploadedFileInfo.mimeType });
                     const file = new File([blob], uploadedFileInfo.name, { type: uploadedFileInfo.mimeType });
-                    
+
                     // Add file to tabs and determine page count
                     let pages = 1;
                     if (uploadedFileInfo.mimeType === 'application/pdf') {
@@ -619,10 +745,10 @@ async function openProject(project) {
                             pages = 1;
                         }
                     }
-                    
+
                     const fileIndex = tabs.addFile(file, pages);
                     console.log(`Restored file: ${uploadedFileInfo.name} (pages: ${pages})`);
-                    
+
                     // Switch to the restored file
                     switchTab(fileIndex);
                     ui.notify(`Loaded: ${uploadedFileInfo.name}`, 'success');
@@ -636,7 +762,7 @@ async function openProject(project) {
             }
         }
 
-        // Enable auto-save for this project
+        // Enable auto-save (real-time) for this project
         editor.enableAutoSave(async (projectName, contents) => {
             try {
                 // Include current file if available
@@ -652,7 +778,7 @@ async function openProject(project) {
                             reader.onerror = reject;
                             reader.readAsArrayBuffer(currentFile.file);
                         });
-                        
+
                         if (autoFileBuffer instanceof ArrayBuffer) {
                             const bytes = new Uint8Array(autoFileBuffer);
                             let binaryString = '';
@@ -666,20 +792,20 @@ async function openProject(project) {
                         autoSaveFileData = null;
                     }
                 }
-                
+
                 await api.autoSaveProject(projectName, contents, autoSaveFileName, autoSaveFileData);
                 console.log('Project auto-saved');
             } catch (err) {
                 console.error('Auto-save failed:', err);
             }
-        }, 30000); // Auto-save every 30 seconds
+        });
 
         switchToEditor();
-        
+
         // Show main success notification
         const message = `Opened: ${project.name}`;
         ui.notify(message, 'success');
-        
+
         // Log uploaded file info for debugging
         if (uploadedFileInfo) {
             console.log('Project has associated file:', uploadedFileInfo);
@@ -692,150 +818,12 @@ async function openProject(project) {
     }
 }
 
-async function saveProjectToDrive() {
-    console.log('saveProjectToDrive called');
-    
-    if (!editor.currentProjectName) {
-        const name = prompt('Enter project name:', 'My Project');
-        if (!name) return;
-        editor.currentProjectName = name;
-    }
-
-    ui.showSpinner('Saving project...');
-    
-    try {
-        console.log('Getting editor contents...');
-        const contents = editor.getContents();
-        
-        // Get the current file and convert to base64 if available
-        let fileName = null;
-        let fileData = null;
-        const activeFile = tabs.getActiveFile();
-        if (activeFile && activeFile.file) {
-            fileName = activeFile.file.name;
-            console.log(`Including file: ${fileName}`);
-            
-            try {
-                // Read the file as base64
-                fileData = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        // Get the base64 data
-                        resolve(e.target.result);
-                    };
-                    reader.onerror = reject;
-                    reader.readAsArrayBuffer(activeFile.file);
-                });
-                
-                // Convert ArrayBuffer to base64
-                if (fileData instanceof ArrayBuffer) {
-                    const bytes = new Uint8Array(fileData);
-                    let binaryString = '';
-                    for (let i = 0; i < bytes.byteLength; i++) {
-                        binaryString += String.fromCharCode(bytes[i]);
-                    }
-                    fileData = btoa(binaryString);
-                }
-                console.log(`File converted to base64 (${fileData.length} chars)`);
-            } catch (err) {
-                console.warn('Could not read file:', err);
-                // Continue without file data
-                fileName = null;
-                fileData = null;
-            }
-        }
-        
-        console.log(`Calling api.saveProject with name: ${editor.currentProjectName}`);
-        const response = await api.saveProject(editor.currentProjectName, contents, fileName, fileData);
-        
-        console.log('API response:', response);
-        editor.currentProjectId = response.file_id;
-
-        // Mark first project as created if not already done (for manual saves)
-        if (!isFirstProjectCreated) {
-            isFirstProjectCreated = true;
-        }
-
-        // Enable auto-save if not already enabled
-        // Only enable if project was actually saved to Drive
-        if (!editor.autoSaveInterval && response.saved_to_drive !== false) {
-            console.log('Enabling auto-save...');
-            editor.enableAutoSave(async (projectName, contents) => {
-                try {
-                    // For auto-save, we also include the current file if available
-                    let fileName = null;
-                    let fileData = null;
-                    const activeFile = tabs.getActiveFile();
-                    if (activeFile && activeFile.file) {
-                        fileName = activeFile.file.name;
-                        try {
-                            const fileBuffer = await new Promise((resolve, reject) => {
-                                const reader = new FileReader();
-                                reader.onload = (e) => resolve(e.target.result);
-                                reader.onerror = reject;
-                                reader.readAsArrayBuffer(activeFile.file);
-                            });
-                            
-                            if (fileBuffer instanceof ArrayBuffer) {
-                                const bytes = new Uint8Array(fileBuffer);
-                                let binaryString = '';
-                                for (let i = 0; i < bytes.byteLength; i++) {
-                                    binaryString += String.fromCharCode(bytes[i]);
-                                }
-                                fileData = btoa(binaryString);
-                            }
-                        } catch (err) {
-                            fileName = null;
-                            fileData = null;
-                        }
-                    }
-                    
-                    await api.autoSaveProject(projectName, contents, fileName, fileData);
-                    console.log('Project auto-saved');
-                } catch (err) {
-                    console.error('Auto-save failed:', err);
-                }
-            }, 30000); // Auto-save every 30 seconds
-        }
-
-        const message = response.saved_to_drive === false 
-            ? `✓ Project saved locally: ${response.name}\n(Re-authenticate to sync to Google Drive)`
-            : `✓ Project saved to Google Drive: ${response.name}`;
-        
-        console.log('Showing notification:', message);
-        ui.notify(message, 'success');
-        
-        // Brief visual feedback - add a checkmark animation to the save button
-        const saveBtn = document.querySelector('.ql-save-drive');
-        if (saveBtn) {
-            saveBtn.style.opacity = '0.5';
-            setTimeout(() => {
-                saveBtn.style.opacity = '1';
-            }, 300);
-        }
-    } catch (err) {
-        console.error('Error in saveProjectToDrive:', err);
-        ui.notify(`Failed to save project: ${err.message}`, 'error');
-    } finally {
-        ui.hideSpinner();
-    }
-}
-
 function setupProjectManagement() {
     // Create New Project button
     const createBtn = document.getElementById('createNewProjectBtn');
     if (createBtn) {
         createBtn.addEventListener('click', createNewProject);
     }
-
-    // Save Project button in navbar
-    const saveBtn = document.getElementById('saveProjectBtn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', saveProjectToDrive);
-    }
-
-    // Save to Drive custom event from editor toolbar
-    document.addEventListener('editor:save-to-drive', saveProjectToDrive);
 }
 
 async function handleFirstProjectCreation() {
@@ -845,12 +833,12 @@ async function handleFirstProjectCreation() {
     editor.clear();
     editor.currentProjectName = projectName;
     editor.currentProjectId = null;
-    
+
     ui.showSpinner('Creating first project...');
-    
+
     try {
         const contents = editor.getContents();
-        
+
         // Get the current file and convert to base64 if available
         let fileName = null;
         let fileData = null;
@@ -858,7 +846,7 @@ async function handleFirstProjectCreation() {
         if (activeFile && activeFile.file) {
             fileName = activeFile.file.name;
             console.log(`Including file in first project: ${fileName}`);
-            
+
             try {
                 // Read the file as base64
                 const fileBuffer = await new Promise((resolve, reject) => {
@@ -867,7 +855,7 @@ async function handleFirstProjectCreation() {
                     reader.onerror = reject;
                     reader.readAsArrayBuffer(activeFile.file);
                 });
-                
+
                 // Convert ArrayBuffer to base64
                 if (fileBuffer instanceof ArrayBuffer) {
                     const bytes = new Uint8Array(fileBuffer);
@@ -885,13 +873,13 @@ async function handleFirstProjectCreation() {
                 fileData = null;
             }
         }
-        
+
         const response = await api.createFirstProject(projectName, contents, fileName, fileData);
-        
+
         editor.currentProjectId = response.file_id;
         isFirstProjectCreated = true;
 
-        // Enable auto-save for this project
+        // Enable auto-save (real-time) for this project
         // If project is not saved to drive, auto-save won't work, but user can still edit locally
         if (response.saved_to_drive !== false) {
             editor.enableAutoSave(async (projectName, contents) => {
@@ -909,7 +897,7 @@ async function handleFirstProjectCreation() {
                                 reader.onerror = reject;
                                 reader.readAsArrayBuffer(currentFile.file);
                             });
-                            
+
                             if (autoFileBuffer instanceof ArrayBuffer) {
                                 const bytes = new Uint8Array(autoFileBuffer);
                                 let binaryString = '';
@@ -923,19 +911,19 @@ async function handleFirstProjectCreation() {
                             autoSaveFileData = null;
                         }
                     }
-                    
+
                     await api.autoSaveProject(projectName, contents, autoSaveFileName, autoSaveFileData);
                     console.log('Project auto-saved');
                 } catch (err) {
                     console.error('Auto-save failed:', err);
                 }
-            }, 30000); // Auto-save every 30 seconds
+            });
         }
 
-        const message = response.saved_to_drive === false 
+        const message = response.saved_to_drive === false
             ? `✓ First project created: ${response.name} (Local - Re-authenticate to sync to Drive)`
             : `✓ First project created: ${response.name}`;
-        
+
         ui.notify(message, 'success');
         switchToEditor();
     } catch (err) {
